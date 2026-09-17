@@ -1,10 +1,15 @@
+import os
+
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 from itertools import combinations
 from collections import Counter
 
-CSV_PATH = "dblp_after_2018.csv"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CSV_PATH = os.path.join(REPO_ROOT, "data", "processed", "dblp_after_2018.csv")
+CHARTS_DIR = os.path.join(REPO_ROOT, "charts")
+os.makedirs(CHARTS_DIR, exist_ok=True)
 TOP_N_AUTHORS = 300  # restrict the network to the most prolific authors to keep it tractable
 
 df = pd.read_csv(CSV_PATH)
@@ -90,6 +95,6 @@ plt.title(f"Co-authorship Network -- Top {TOP_N_AUTHORS} Authors, "
           f"{len(communities)} Detected Communities")
 plt.axis('off')
 plt.tight_layout()
-plt.savefig("chart_10_coauthorship_network.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_10_coauthorship_network.png"), dpi=150)
 plt.close()
 print("\nSaved chart_10_coauthorship_network.png")

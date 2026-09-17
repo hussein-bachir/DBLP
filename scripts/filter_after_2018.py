@@ -1,7 +1,10 @@
+import os
+
 import pandas as pd
 
-INPUT_CSV = "dblp_sample.csv"      # change to whichever file you want to filter
-OUTPUT_CSV = "dblp_after_2018.csv"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+INPUT_CSV = os.path.join(REPO_ROOT, "data", "processed", "dblp_sample.csv")      # change to whichever file you want to filter
+OUTPUT_CSV = os.path.join(REPO_ROOT, "data", "processed", "dblp_after_2018.csv")
 
 df = pd.read_csv(INPUT_CSV)
 df['year'] = pd.to_numeric(df['year'], errors='coerce')

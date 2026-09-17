@@ -1,12 +1,9 @@
-# Raw + derived data (multi-GB, regenerate via parse_dblp.py / filter_after_2018.py)
-dblp.xml.gz
-dblp_full.csv
-dblp_sample.csv
-dblp_sample_no_DTD.csv
-dblp_after_2018.csv
+# Raw + derived data (multi-GB, regenerate via scripts/parse_dblp.py / filter_after_2018.py)
+data/raw/dblp.xml.gz
+data/processed/*.csv
 
-# matplotlib/seaborn chart output (regenerate via visualize_dblp*.py / analyze_*.py)
-chart_*.png
+# matplotlib/seaborn chart output (regenerate via scripts/visualize_dblp*.py / analyze_*.py)
+charts/*.png
 
 # Python virtual environment
 venv/

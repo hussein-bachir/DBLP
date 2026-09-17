@@ -1,3 +1,4 @@
+import os
 import re
 from collections import Counter
 
@@ -7,7 +8,10 @@ import seaborn as sns
 
 sns.set_theme(style="whitegrid")
 
-CSV_PATH = "dblp_after_2018.csv"  # change if your file is named differently
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CSV_PATH = os.path.join(REPO_ROOT, "data", "processed", "dblp_after_2018.csv")
+CHARTS_DIR = os.path.join(REPO_ROOT, "charts")
+os.makedirs(CHARTS_DIR, exist_ok=True)
 
 df = pd.read_csv(CSV_PATH)
 df['year'] = pd.to_numeric(df['year'], errors='coerce')
@@ -37,7 +41,7 @@ plt.title("Author Productivity Distribution (log scale)")
 plt.xlabel("Papers published (in this sample)")
 plt.ylabel("Number of authors (log scale)")
 plt.tight_layout()
-plt.savefig("chart_6_author_productivity.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_6_author_productivity.png"), dpi=150)
 plt.close()
 print("Saved chart_6_author_productivity.png")
 print(f"Total distinct authors: {len(paper_counts_per_author)}")
@@ -58,7 +62,7 @@ plt.title("Average Number of Authors per Paper, by Year")
 plt.xlabel("Year")
 plt.ylabel("Average authors per paper")
 plt.tight_layout()
-plt.savefig("chart_7_avg_team_size_over_time.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_7_avg_team_size_over_time.png"), dpi=150)
 plt.close()
 print("Saved chart_7_avg_team_size_over_time.png")
 
@@ -82,7 +86,7 @@ plt.title("Number of Distinct Venues per Year (in this sample)")
 plt.xlabel("Year")
 plt.ylabel("Distinct venues")
 plt.tight_layout()
-plt.savefig("chart_8_distinct_venues_per_year.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_8_distinct_venues_per_year.png"), dpi=150)
 plt.close()
 print("Saved chart_8_distinct_venues_per_year.png")
 
@@ -109,7 +113,7 @@ plt.barh(words[::-1], counts[::-1], color='seagreen')
 plt.title("Top 20 Most Common Words in Paper Titles")
 plt.xlabel("Occurrences")
 plt.tight_layout()
-plt.savefig("chart_9_common_title_words.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_9_common_title_words.png"), dpi=150)
 plt.close()
 print("Saved chart_9_common_title_words.png")
 

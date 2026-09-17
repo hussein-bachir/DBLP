@@ -1,10 +1,15 @@
+import os
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 sns.set_theme(style="whitegrid")
 
-CSV_PATH = "dblp_after_2018.csv"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CSV_PATH = os.path.join(REPO_ROOT, "data", "processed", "dblp_after_2018.csv")
+CHARTS_DIR = os.path.join(REPO_ROOT, "charts")
+os.makedirs(CHARTS_DIR, exist_ok=True)
 
 # Edit this dict to compare whichever venues you want. Keys must match the
 # 'namespace/venue' prefix from a DBLP key, e.g. 'conf/cvpr' or 'journals/tvt'.
@@ -52,6 +57,6 @@ plt.xlabel("Year")
 plt.ylabel("Number of papers")
 plt.legend()
 plt.tight_layout()
-plt.savefig("chart_12_venue_comparison.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_12_venue_comparison.png"), dpi=150)
 plt.close()
 print("\nSaved chart_12_venue_comparison.png")

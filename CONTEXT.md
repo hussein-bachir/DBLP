@@ -5,16 +5,27 @@ Extract `article`/`inproceedings` records (key, title, year, authors) from the
 full DBLP XML dump, analyze them, and present findings as an interactive
 JS dashboard (not Streamlit) for a master's course assignment.
 
-## Files in this project
-- `dblp.xml.gz`, `dblp.dtd` -- raw source data (downloaded from dblp.org)
-- `parse_dblp.py` -- the working, memory-safe full-dataset parser
-- `dblp_after_2018.csv` (or similar) -- extracted output
-- `visualize_dblp.py`, `visualize_dblp_extra.py` -- matplotlib exploratory charts
-- `analyze_coauthor_network.py`, `analyze_topic_trends.py`,
-  `analyze_venue_comparison.py` -- deeper analytical scripts
+## Files in this project (reorganized -- see below)
+- `data/raw/dblp.xml.gz`, `data/raw/dblp.dtd` -- raw source data
+  (downloaded from dblp.org), gitignored
+- `data/processed/*.csv` -- parser/filter output (`dblp_full.csv`,
+  `dblp_sample.csv`, `dblp_after_2018.csv`, ...), gitignored
+- `scripts/parse_dblp.py` -- the working, memory-safe full-dataset parser
+- `scripts/visualize_dblp.py`, `scripts/visualize_dblp_extra.py` --
+  matplotlib exploratory charts, saved to `charts/` (gitignored)
+- `scripts/analyze_coauthor_network.py`, `scripts/analyze_topic_trends.py`,
+  `scripts/analyze_venue_comparison.py` -- deeper analytical scripts
+- `debug/` -- standalone diagnostic scripts used to root-cause the parser
+  bugs below; reference/history, not part of the regular pipeline
 - `dashboard/` -- the JS dashboard (index.html, app.js, style.css,
   preprocess.py, data/*.json) -- built, run, and verified working
   (see "Current task" below)
+
+All scripts resolve `data/`/`charts/` paths relative to the repo root via a
+`REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`
+constant, so they work regardless of the invoking working directory. The
+repo is a local git repository (`git init`'d, no remote) with the large
+data/`venv/`/log files gitignored -- see `.gitignore`.
 
 ## Non-obvious bugs already solved (don't reintroduce these)
 

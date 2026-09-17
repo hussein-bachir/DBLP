@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -5,7 +7,10 @@ from collections import Counter
 
 sns.set_theme(style="whitegrid")
 
-CSV_PATH = "dblp_after_2018.csv"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CSV_PATH = os.path.join(REPO_ROOT, "data", "processed", "dblp_after_2018.csv")
+CHARTS_DIR = os.path.join(REPO_ROOT, "charts")
+os.makedirs(CHARTS_DIR, exist_ok=True)
 
 df = pd.read_csv(CSV_PATH)
 
@@ -30,7 +35,7 @@ plt.title("Publications per Year (sample)")
 plt.xlabel("Year")
 plt.ylabel("Number of publications")
 plt.tight_layout()
-plt.savefig("chart_1_publications_per_year.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_1_publications_per_year.png"), dpi=150)
 plt.close()
 print("Saved chart_1_publications_per_year.png")
 
@@ -42,7 +47,7 @@ plt.figure(figsize=(6, 6))
 plt.pie(type_counts.values, labels=type_counts.index, autopct='%1.1f%%', startangle=90)
 plt.title("Journal Articles vs Conference Papers")
 plt.tight_layout()
-plt.savefig("chart_2_type_distribution.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_2_type_distribution.png"), dpi=150)
 plt.close()
 print("Saved chart_2_type_distribution.png")
 print(f"Type counts:\n{type_counts}\n")
@@ -62,7 +67,7 @@ plt.barh(names[::-1], counts[::-1])
 plt.title("Top 15 Most Prolific Authors (in this sample)")
 plt.xlabel("Number of papers")
 plt.tight_layout()
-plt.savefig("chart_3_top_authors.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_3_top_authors.png"), dpi=150)
 plt.close()
 print("Saved chart_3_top_authors.png")
 
@@ -78,7 +83,7 @@ plt.title("Distribution of Number of Authors per Paper")
 plt.xlabel("Number of authors")
 plt.ylabel("Number of papers")
 plt.tight_layout()
-plt.savefig("chart_4_coauthor_distribution.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_4_coauthor_distribution.png"), dpi=150)
 plt.close()
 print("Saved chart_4_coauthor_distribution.png")
 print(f"Average authors per paper: {coauthor_counts.mean():.2f}")
@@ -103,8 +108,8 @@ plt.barh(venue_counts.index[::-1], venue_counts.values[::-1])
 plt.title("Top 15 Venues by Paper Count (in this sample)")
 plt.xlabel("Number of papers")
 plt.tight_layout()
-plt.savefig("chart_5_top_venues.png", dpi=150)
+plt.savefig(os.path.join(CHARTS_DIR, "chart_5_top_venues.png"), dpi=150)
 plt.close()
 print("Saved chart_5_top_venues.png")
 
-print("\nAll charts saved to the current folder. Done.")
+print(f"\nAll charts saved to {CHARTS_DIR}. Done.")

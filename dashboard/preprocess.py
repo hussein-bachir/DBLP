@@ -3,7 +3,7 @@ client-side dashboard. The raw CSV has millions of rows and can't be loaded
 in the browser, so every heavy computation (author counts, the co-authorship
 network, keyword trends...) happens here, once, with pandas/networkx.
 
-Mirrors the logic already validated in the repo-root analyze_*.py /
+Mirrors the logic already validated in the ../scripts/analyze_*.py /
 visualize_dblp*.py scripts, but writes JSON instead of matplotlib PNGs.
 """
 import json
@@ -15,7 +15,7 @@ from itertools import combinations
 import networkx as nx
 import pandas as pd
 
-CSV_PATH = os.path.join("..", "dblp_after_2018.csv")
+CSV_PATH = os.path.join("..", "data", "processed", "dblp_after_2018.csv")
 OUT_DIR = "data"
 YEAR_MIN, YEAR_MAX = 2019, 2025  # trims the DBLP-indexing-lag tail, see CONTEXT.md
 TOP_N_AUTHORS = 20

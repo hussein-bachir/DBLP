@@ -1,10 +1,12 @@
 import gzip
+import os
 import re
 from collections import Counter
 from lxml import etree
 
-xml_file_path = "dblp.xml.gz"
-dtd_file_path = "dblp.dtd"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+xml_file_path = os.path.join(REPO_ROOT, "data", "raw", "dblp.xml.gz")
+dtd_file_path = os.path.join(REPO_ROOT, "data", "raw", "dblp.dtd")
 
 
 def load_entity_map(dtd_path):
