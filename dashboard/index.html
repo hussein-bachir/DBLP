@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DBLP 2019&ndash;2025: A Field in Motion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="masthead">
+    <div class="eyebrow">DBLP &middot; 2019&ndash;2025 &middot; computer science publication record</div>
+    <h1>A Field in Motion</h1>
+    <p class="subtitle">
+      Publication, authorship, and topic patterns extracted from the full DBLP
+      dump. Figures are computed from the unlimited full-file parse and
+      trimmed to 2019&ndash;2025 to avoid both the pre-2019 window and the
+      most recent indexing-lag years, which understate real output.
+    </p>
+  </header>
+
+  <div id="error-banner" class="state-banner" hidden></div>
+
+  <div class="stat-strip" id="stat-strip"></div>
+
+  <main>
+
+    <section class="card">
+      <h2>Publications per Year</h2>
+      <p class="note">Records per calendar year, article + inproceedings combined.</p>
+      <div class="chart" id="chart-pubs-year"></div>
+    </section>
+
+    <section class="card">
+      <h2>Articles vs. Conference Papers</h2>
+      <p class="note">Share of journal articles vs. inproceedings records.</p>
+      <div class="chart" id="chart-type"></div>
+    </section>
+
+    <section class="card">
+      <h2>Most Prolific Authors</h2>
+      <p class="note">Top 20 authors by paper count, 2019&ndash;2025.</p>
+      <div class="chart tall" id="chart-top-authors"></div>
+    </section>
+
+    <section class="card">
+      <h2>Top Venues</h2>
+      <p class="note">Top 20 venues by paper count (DBLP key prefix).</p>
+      <div class="chart tall" id="chart-top-venues"></div>
+    </section>
+
+    <section class="card">
+      <h2>Authors per Paper</h2>
+      <p class="note">Distribution of team size, 1&ndash;20 co-authors.</p>
+      <div class="chart short" id="chart-coauthor-dist"></div>
+    </section>
+
+    <section class="card">
+      <h2>Average Team Size Over Time</h2>
+      <p class="note">Mean number of authors per paper, by year.</p>
+      <div class="chart short" id="chart-team-size"></div>
+    </section>
+
+    <section class="card">
+      <h2>Author Productivity (log scale)</h2>
+      <p class="note">How many authors published 1 paper vs. 20+.</p>
+      <div class="chart short" id="chart-author-productivity"></div>
+    </section>
+
+    <section class="card">
+      <h2>Distinct Venues per Year</h2>
+      <p class="note">Count of unique venues publishing each year.</p>
+      <div class="chart short" id="chart-venues-year"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Most Common Title Words</h2>
+      <p class="note">Top 30 words in paper titles, stopwords removed.</p>
+      <div class="chart" id="chart-title-words"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Topic Prevalence in Titles</h2>
+      <p class="note">Share of that year's titles mentioning each keyword &mdash; normalized so the lines track topical interest, not dataset growth.</p>
+      <div class="chart" id="chart-topic-trends"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Venue Growth by Subfield</h2>
+      <p class="note">Raw paper counts for five representative venues across CV, NLP, control theory, IR, and remote sensing.</p>
+      <div class="chart" id="chart-venue-comparison"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Co-authorship Network</h2>
+      <p class="note">The 150 most prolific authors, edge-weighted by shared papers, colored by detected community. Drag nodes, scroll to zoom.</p>
+      <div class="chart tall" id="chart-network"></div>
+    </section>
+
+  </main>
+
+  <footer>
+    Built with ECharts. Data: DBLP dump, parsed and aggregated offline via
+    <span class="mono">preprocess.py</span>. Served locally &mdash; see
+    dashboard/README for run instructions.
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/6.1.0/echarts.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
