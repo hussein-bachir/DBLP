@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DBLP 2019&ndash;2025: A Field in Motion</title>
+  <title>DBLP: A Field in Motion</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,13 +12,11 @@
 <body>
 
   <header class="masthead">
-    <div class="eyebrow">DBLP &middot; 2019&ndash;2025 &middot; computer science publication record</div>
+    <div class="eyebrow">DBLP &middot; <span id="eyebrow-years">&hellip;</span> &middot; computer science publication record</div>
     <h1>A Field in Motion</h1>
-    <p class="subtitle">
+    <p class="subtitle" id="scope-note">
       Publication, authorship, and topic patterns extracted from the full DBLP
-      dump. Figures are computed from the unlimited full-file parse and
-      trimmed to 2019&ndash;2025 to avoid both the pre-2019 window and the
-      most recent indexing-lag years, which understate real output.
+      dump.
     </p>
   </header>
 
@@ -30,7 +28,7 @@
 
     <section class="card">
       <h2>Publications per Year</h2>
-      <p class="note">Records per calendar year, article + inproceedings combined.</p>
+      <p class="note">Records per calendar year, article + inproceedings combined. Drag the slider to zoom.</p>
       <div class="chart" id="chart-pubs-year"></div>
     </section>
 
@@ -42,13 +40,13 @@
 
     <section class="card">
       <h2>Most Prolific Authors</h2>
-      <p class="note">Top 20 authors by paper count, 2019&ndash;2025.</p>
+      <p class="note">Top 20 authors by all-time paper count.</p>
       <div class="chart tall" id="chart-top-authors"></div>
     </section>
 
     <section class="card">
       <h2>Top Venues</h2>
-      <p class="note">Top 20 venues by paper count (DBLP key prefix).</p>
+      <p class="note">Top 20 venues by all-time paper count (DBLP key prefix). <span class="mono">journals/corr</span> is DBLP's mirror of arXiv preprints, about 10% of all records, which is why it dwarfs everything else.</p>
       <div class="chart tall" id="chart-top-venues"></div>
     </section>
 
@@ -60,7 +58,7 @@
 
     <section class="card">
       <h2>Average Team Size Over Time</h2>
-      <p class="note">Mean number of authors per paper, by year.</p>
+      <p class="note">Mean number of authors per paper, by year. Opens at 1970 &mdash; earlier years have too few records for a stable average; drag the slider to see them.</p>
       <div class="chart short" id="chart-team-size"></div>
     </section>
 
@@ -72,7 +70,7 @@
 
     <section class="card">
       <h2>Distinct Venues per Year</h2>
-      <p class="note">Count of unique venues publishing each year.</p>
+      <p class="note">Count of unique venues publishing each year. Opens at 1970; drag the slider for earlier years.</p>
       <div class="chart short" id="chart-venues-year"></div>
     </section>
 
@@ -84,19 +82,19 @@
 
     <section class="card wide">
       <h2>Topic Prevalence in Titles</h2>
-      <p class="note">Share of that year's titles mentioning each keyword &mdash; normalized so the lines track topical interest, not dataset growth.</p>
+      <p class="note">Share of that year's titles mentioning each keyword &mdash; normalized so the lines track topical interest, not dataset growth. Opens at 1970; drag the slider for earlier years.</p>
       <div class="chart" id="chart-topic-trends"></div>
     </section>
 
     <section class="card wide">
       <h2>Venue Growth by Subfield</h2>
-      <p class="note">Raw paper counts for five representative venues across CV, NLP, control theory, IR, and remote sensing.</p>
+      <p class="note">Raw paper counts for five representative venues across CV, NLP, control theory, IR, and remote sensing. Opens at 1970; drag the slider for earlier years. The Remote Sensing drop to zero in 2025 is an indexing gap &mdash; DBLP has no 2025 records for that journal yet &mdash; not a real decline.</p>
       <div class="chart" id="chart-venue-comparison"></div>
     </section>
 
     <section class="card wide">
       <h2>Co-authorship Network</h2>
-      <p class="note">The 150 most prolific authors, edge-weighted by shared papers, colored by detected community. Drag nodes, scroll to zoom.</p>
+      <p class="note">The 150 most prolific authors of all time, edge-weighted by shared papers, colored by detected community. Drag nodes, scroll to zoom.</p>
       <div class="chart tall" id="chart-network"></div>
     </section>
 

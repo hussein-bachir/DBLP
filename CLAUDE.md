@@ -21,9 +21,9 @@ read it before making changes and keep it current as you work.
 - Run scripts via the venv interpreter directly, e.g.:
   `.\venv\Scripts\python.exe scripts\parse_dblp.py`
 - Every script under `scripts/`, `debug/`, and `dashboard/preprocess.py`
-  resolves its data paths relative to the repo root (via a `REPO_ROOT`
-  constant built from `__file__`, or `..` in `preprocess.py`'s case), so
-  they can be invoked from any working directory.
+  resolves its data paths from its own location (via a `REPO_ROOT` / `HERE`
+  constant built from `__file__`), so they can be invoked from any working
+  directory.
 - No test suite, linter, or build step in this project.
 
 ## Layout
@@ -57,8 +57,9 @@ read it before making changes and keep it current as you work.
    findings — see bias note below.
 3. `scripts/filter_after_2018.py` — filters a parsed CSV down to
    `year > 2018`, writing `data/processed/dblp_after_2018.csv`. This is the
-   file the `analyze_*.py`, `visualize_dblp*.py`, and `dashboard/
-   preprocess.py` scripts consume.
+   file the `analyze_*.py` and `visualize_dblp*.py` scripts consume. Its
+   `INPUT_CSV` defaults to `dblp_sample.csv` (the biased 5M-record sample) —
+   point it at `dblp_full.csv` for any real findings.
 4. `scripts/visualize_dblp.py`, `scripts/visualize_dblp_extra.py` —
    exploratory matplotlib/seaborn charts (`charts/chart_1_*.png` …
    `chart_9_*.png`).
@@ -66,9 +67,11 @@ read it before making changes and keep it current as you work.
    `scripts/analyze_venue_comparison.py` — deeper analyses (co-authorship
    network via `networkx`, keyword/topic trends, per-venue growth) producing
    `charts/chart_10_*.png`–`chart_12_*.png`.
-6. `dashboard/preprocess.py` — aggregates `data/processed/dblp_after_2018.csv`
-   into small JSON files under `dashboard/data/`, since the raw CSV is far
-   too large to load client-side. Built, run, and verified rendering
+6. `dashboard/preprocess.py` — streams the full `data/processed/dblp_full.csv`
+   (all years up to 2025, in chunks, two passes) into small JSON files under
+   `dashboard/data/`, since the raw CSV is far too large to load
+   client-side. It reads `dblp_full.csv` directly, so it does not depend on
+   `filter_after_2018.py`. Built, run, and verified rendering
    correctly (see CONTEXT.md for the bugs found/fixed along the way). Serve
    with `python -m http.server` from within `dashboard/` — opening
    `index.html` directly breaks the JSON `fetch()` calls under the
@@ -98,8 +101,11 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   the full unlimited `parse_dblp.py` output for anything that goes into the
   actual analysis/report; limited runs are for pipeline debugging only.
 - The most recent 1–2 years in any time series are artificially low due to
-  DBLP indexing lag, not a real publication decline — existing scripts
-  already trim to a 2019–2025 window; preserve that when adding charts.
+  DBLP indexing lag, not a real publication decline — the scripts already
+  cut off at 2025 (`dashboard/preprocess.py` `YEAR_MAX`, and the 2019–2025
+  window in `scripts/`); preserve that when adding charts. Ratio/average
+  charts in the dashboard open at 1970 because earlier years are too sparse
+  for stable shares.
 - On Windows, avoid multi-line `python -c "..."` one-liners (cmd doesn't
   handle them) — write a throwaway `.py` script instead.
 - **A pinned CDN library version can 404 silently.** `dashboard/index.html`

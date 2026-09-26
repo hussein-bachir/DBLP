@@ -1,23 +1,33 @@
-"""Aggregate dblp_after_2018.csv into small JSON files under data/ for the
-client-side dashboard. The raw CSV has millions of rows and can't be loaded
-in the browser, so every heavy computation (author counts, the co-authorship
-network, keyword trends...) happens here, once, with pandas/networkx.
+"""Aggregate dblp_full.csv (every article/inproceedings record, all years) into
+small JSON files under data/ for the client-side dashboard. The raw CSV has
+millions of rows and can't be loaded in the browser, so every heavy
+computation (author counts, the co-authorship network, keyword trends...)
+happens here, once, with pandas/networkx.
 
-Mirrors the logic already validated in the ../scripts/analyze_*.py /
-visualize_dblp*.py scripts, but writes JSON instead of matplotlib PNGs.
+The CSV is streamed in chunks (twice: once for all the counters, once for the
+co-authorship edges, which need the global top-N authors first) so memory stays
+bounded even at ~8.4M rows.
+
+Mirrors the logic in the ../scripts/analyze_*.py / visualize_dblp*.py
+scripts, but writes JSON instead of matplotlib PNGs.
 """
 import json
 import os
 import re
-from collections import Counter
+import time
+from collections import Counter, defaultdict
 from itertools import combinations
 
 import networkx as nx
 import pandas as pd
 
-CSV_PATH = os.path.join("..", "data", "processed", "dblp_after_2018.csv")
-OUT_DIR = "data"
-YEAR_MIN, YEAR_MAX = 2019, 2025  # trims the DBLP-indexing-lag tail, see CONTEXT.md
+HERE = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(HERE, "..", "data", "processed", "dblp_full.csv")
+OUT_DIR = os.path.join(HERE, "data")
+# Upper bound trims the still-being-indexed tail (2026 partial, 2027 "to
+# appear"), see CONTEXT.md. Lower bound is just "everything".
+YEAR_MIN, YEAR_MAX = 1900, 2025
+CHUNK_ROWS = 500_000
 TOP_N_AUTHORS = 20
 TOP_N_VENUES = 20
 TOP_N_WORDS = 30
@@ -33,12 +43,17 @@ VENUES_TO_COMPARE = {
 
 TOPIC_KEYWORDS = ["neural", "transformer", "blockchain", "quantum",
                   "privacy", "robot", "graph", "large language"]
+TOPIC_PATTERNS = {
+    kw: r'\b' + kw.replace(' ', r'\s+') + r'\b' for kw in TOPIC_KEYWORDS
+}
 
 STOPWORDS = set("""
 a an the of for on in to and with using towards from by via approach based
 study analysis review survey new novel systems system model models method
 methods framework case into over under between across
 """.split())
+WORD_RE = re.compile(r"[a-zA-Z']+")
+VENUE_RE = r'^([^/]+/[^/]+)'
 
 
 def save(name, obj):
@@ -48,82 +63,104 @@ def save(name, obj):
     print(f"  wrote {path}")
 
 
-def extract_venue(key):
-    if not isinstance(key, str):
-        return None
-    parts = key.split('/')
-    if len(parts) >= 2:
-        return f"{parts[0]}/{parts[1]}"
-    return None
+def split_authors(s):
+    return [a.strip() for a in s.split(';') if a.strip()]
+
+
+def read_chunks(usecols, stats=None):
+    """Yield year-filtered chunks. `stats` (a dict) accumulates rows read/kept."""
+    for chunk in pd.read_csv(CSV_PATH, usecols=usecols, chunksize=CHUNK_ROWS, dtype=str):
+        year = pd.to_numeric(chunk['year'], errors='coerce')
+        keep = year.between(YEAR_MIN, YEAR_MAX)
+        if stats is not None:
+            stats['read'] += len(chunk)
+            stats['kept'] += int(keep.sum())
+        yield chunk[keep].assign(year=year[keep].astype(int))
 
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
+    started = time.time()
 
-    print(f"Loading {CSV_PATH} ...")
-    df = pd.read_csv(CSV_PATH)
-    df['year'] = pd.to_numeric(df['year'], errors='coerce')
-    df = df[(df['year'] >= YEAR_MIN) & (df['year'] <= YEAR_MAX)].copy()
-    df['year'] = df['year'].astype(int)
-    df['venue'] = df['key'].apply(extract_venue)
-    df['author_list'] = df['authors'].fillna("").apply(
-        lambda s: [a.strip() for a in s.split(';') if a.strip()]
-    )
-    df['n_authors'] = df['author_list'].apply(len)
-    print(f"{len(df)} records in {YEAR_MIN}-{YEAR_MAX}")
-
-    all_years = sorted(df['year'].unique().tolist())
-
+    year_counts = Counter()
+    type_counts = Counter()
+    coauthor_dist = Counter()
+    team_size_sum = Counter()
+    team_size_n = Counter()
     author_counter = Counter()
-    for lst in df['author_list']:
-        author_counter.update(lst)
+    venue_counter = Counter()
+    venues_by_year = defaultdict(set)
+    word_counter = Counter()
+    topic_counts = {kw: Counter() for kw in TOPIC_KEYWORDS}
+    venue_year_counts = {v: Counter() for v in VENUES_TO_COMPARE}
+    stats = {'read': 0, 'kept': 0}
+
+    print(f"Pass 1/2: counters from {CSV_PATH}")
+    for i, chunk in enumerate(read_chunks(['type', 'key', 'title', 'year', 'authors'], stats), 1):
+        author_lists = [split_authors(s) for s in chunk['authors'].fillna("")]
+        n_authors = pd.Series([len(lst) for lst in author_lists], index=chunk.index)
+        for lst in author_lists:
+            author_counter.update(lst)
+
+        year_counts.update(chunk['year'].value_counts().to_dict())
+        type_counts.update(chunk['type'].value_counts().to_dict())
+        coauthor_dist.update(n_authors.value_counts().to_dict())
+        grouped = n_authors.groupby(chunk['year']).agg(['sum', 'count'])
+        for y, row in grouped.iterrows():
+            team_size_sum[y] += int(row['sum'])
+            team_size_n[y] += int(row['count'])
+
+        venue = chunk['key'].str.extract(VENUE_RE)[0]
+        venue_counter.update(venue.dropna().value_counts().to_dict())
+        vy = pd.DataFrame({'year': chunk['year'], 'venue': venue}).dropna().drop_duplicates()
+        for y, v in zip(vy['year'], vy['venue']):
+            venues_by_year[y].add(v)
+        compared = venue.isin(list(VENUES_TO_COMPARE))
+        for (v, y), c in chunk[compared].groupby([venue[compared], 'year']).size().items():
+            venue_year_counts[v][y] += int(c)
+
+        titles = chunk['title'].fillna("").str.lower()
+        for t in titles:
+            word_counter.update(w for w in WORD_RE.findall(t) if len(w) > 2 and w not in STOPWORDS)
+        for kw, pattern in TOPIC_PATTERNS.items():
+            hits = chunk[titles.str.contains(pattern, regex=True)]
+            topic_counts[kw].update(hits['year'].value_counts().to_dict())
+
+        print(f"  chunk {i}: {stats['read']:,} rows read, {stats['kept']:,} kept "
+              f"({(time.time() - started) / 60:.1f} min)")
+
+    all_years = sorted(year_counts)
+    print(f"{stats['kept']:,} records in {all_years[0]}-{all_years[-1]} "
+          f"({stats['read'] - stats['kept']:,} excluded outside {YEAR_MIN}-{YEAR_MAX})")
 
     # ---------- overview ----------
-    print("Overview...")
+    print("Writing JSON...")
     save("overview.json", {
-        "total_records": int(len(df)),
-        "year_min": int(df['year'].min()),
-        "year_max": int(df['year'].max()),
+        "total_records": stats['kept'],
+        "excluded_records": stats['read'] - stats['kept'],
+        "year_min": int(all_years[0]),
+        "year_max": int(all_years[-1]),
         "distinct_authors": len(author_counter),
-        "distinct_venues": int(df['venue'].nunique()),
+        "distinct_venues": len(venue_counter),
     })
 
-    # ---------- publications per year ----------
-    print("Publications per year...")
-    year_counts = df.groupby('year').size().sort_index()
     save("publications_per_year.json", [
-        {"year": int(y), "count": int(c)} for y, c in year_counts.items()
+        {"year": int(y), "count": int(year_counts[y])} for y in all_years
     ])
-
-    # ---------- type distribution ----------
-    print("Type distribution...")
-    type_counts = df['type'].value_counts()
     save("type_distribution.json", [
-        {"type": t, "count": int(c)} for t, c in type_counts.items()
+        {"type": t, "count": int(c)} for t, c in type_counts.most_common()
     ])
-
-    # ---------- top authors ----------
-    print("Top authors...")
-    top_authors = author_counter.most_common(TOP_N_AUTHORS)
-    save("top_authors.json", [{"name": n, "count": c} for n, c in top_authors])
-
-    # ---------- co-author count distribution ----------
-    print("Co-author distribution...")
-    dist = df['n_authors'].value_counts().sort_index()
-    dist = dist[dist.index.to_series().between(1, 20)]
+    save("top_authors.json", [
+        {"name": n, "count": c} for n, c in author_counter.most_common(TOP_N_AUTHORS)
+    ])
     save("coauthor_distribution.json", [
-        {"n_authors": int(k), "count": int(v)} for k, v in dist.items()
+        {"n_authors": int(k), "count": int(coauthor_dist[k])}
+        for k in sorted(coauthor_dist) if 1 <= k <= 20
     ])
-
-    # ---------- top venues ----------
-    print("Top venues...")
-    venue_counts = df['venue'].value_counts().head(TOP_N_VENUES)
     save("top_venues.json", [
-        {"venue": v, "count": int(c)} for v, c in venue_counts.items()
+        {"venue": v, "count": int(c)} for v, c in venue_counter.most_common(TOP_N_VENUES)
     ])
 
-    # ---------- author productivity buckets ----------
-    print("Author productivity...")
     paper_counts_per_author = pd.Series(author_counter, dtype="int64")
     bins = [0, 1, 2, 3, 5, 10, 20, max(int(paper_counts_per_author.max()), 21)]
     labels = ["1", "2", "3", "4-5", "6-10", "11-20", "20+"]
@@ -133,65 +170,41 @@ def main():
         {"bucket": str(b), "count": int(c)} for b, c in bucket_counts.items()
     ])
 
-    # ---------- avg team size by year ----------
-    print("Avg team size by year...")
-    team_size_by_year = df.groupby('year')['n_authors'].mean().sort_index()
     save("avg_team_size_by_year.json", [
-        {"year": int(y), "avg_authors": round(float(v), 3)}
-        for y, v in team_size_by_year.items()
+        {"year": int(y), "avg_authors": round(team_size_sum[y] / team_size_n[y], 3)}
+        for y in all_years
     ])
-
-    # ---------- distinct venues per year ----------
-    print("Distinct venues per year...")
-    venues_by_year = df.groupby('year')['venue'].nunique().sort_index()
     save("venues_per_year.json", [
-        {"year": int(y), "distinct_venues": int(v)}
-        for y, v in venues_by_year.items()
+        {"year": int(y), "distinct_venues": len(venues_by_year[y])} for y in all_years
     ])
-
-    # ---------- top title words ----------
-    print("Top title words...")
-    word_counter = Counter()
-    for title in df['title'].dropna():
-        for w in re.findall(r"[a-zA-Z']+", title.lower()):
-            if len(w) > 2 and w not in STOPWORDS:
-                word_counter[w] += 1
     save("top_title_words.json", [
         {"word": w, "count": c} for w, c in word_counter.most_common(TOP_N_WORDS)
     ])
 
-    # ---------- topic trends ----------
-    print("Topic trends...")
-    df['title_lower'] = df['title'].fillna("").str.lower()
-    papers_per_year = df.groupby('year').size()
-    topic_series = {}
-    for kw in TOPIC_KEYWORDS:
-        pattern = r'\b' + kw.replace(' ', r'\s+') + r'\b'
-        matches = df[df['title_lower'].str.contains(pattern, regex=True, na=False)]
-        counts_per_year = matches.groupby('year').size()
-        pct_per_year = (counts_per_year / papers_per_year * 100).reindex(all_years).fillna(0)
-        topic_series[kw] = [round(float(v), 3) for v in pct_per_year.values]
-    save("topic_trends.json", {"years": all_years, "series": topic_series})
+    save("topic_trends.json", {
+        "years": [int(y) for y in all_years],
+        "series": {
+            kw: [round(topic_counts[kw][y] / year_counts[y] * 100, 3) for y in all_years]
+            for kw in TOPIC_KEYWORDS
+        },
+    })
+    save("venue_comparison.json", {
+        "years": [int(y) for y in all_years],
+        "series": {
+            label: [int(venue_year_counts[key][y]) for y in all_years]
+            for key, label in VENUES_TO_COMPARE.items()
+        },
+    })
 
-    # ---------- venue comparison ----------
-    print("Venue comparison...")
-    venue_series = {}
-    for venue_key, label in VENUES_TO_COMPARE.items():
-        counts = df[df['venue'] == venue_key].groupby('year').size().reindex(all_years).fillna(0)
-        venue_series[label] = [int(v) for v in counts.values]
-    save("venue_comparison.json", {"years": all_years, "series": venue_series})
-
-    # ---------- co-authorship network ----------
-    print(f"Co-authorship network (top {TOP_N_NETWORK_AUTHORS} authors)...")
+    # ---------- co-authorship network (pass 2: needs global top-N first) ----------
+    print(f"Pass 2/2: co-authorship network (top {TOP_N_NETWORK_AUTHORS} authors)...")
     top_network_authors = set(a for a, _ in author_counter.most_common(TOP_N_NETWORK_AUTHORS))
-
     edge_weights = Counter()
-    for lst in df['author_list']:
-        filtered = sorted(set(a for a in lst if a in top_network_authors))
-        if len(filtered) < 2:
-            continue
-        for a, b in combinations(filtered, 2):
-            edge_weights[(a, b)] += 1
+    for chunk in read_chunks(['year', 'authors']):
+        for s in chunk['authors'].fillna(""):
+            filtered = sorted(set(a for a in split_authors(s) if a in top_network_authors))
+            if len(filtered) >= 2:
+                edge_weights.update(combinations(filtered, 2))
 
     G = nx.Graph()
     G.add_nodes_from(top_network_authors)
@@ -200,31 +213,26 @@ def main():
 
     degree_centrality = nx.degree_centrality(G)
     communities = list(nx.community.greedy_modularity_communities(G, weight='weight'))
-    community_map = {}
-    for i, comm in enumerate(communities):
-        for node in comm:
-            community_map[node] = i
+    community_map = {n: i for i, comm in enumerate(communities) for n in comm}
 
-    nodes = [
-        {
-            "id": n,
-            "papers": author_counter[n],
-            "group": community_map.get(n, -1),
-            "degree": round(degree_centrality.get(n, 0), 4),
-        }
-        for n in G.nodes()
-    ]
-    edges = [
-        {"source": a, "target": b, "weight": w}
-        for a, b, w in G.edges(data='weight')
-    ]
     save("coauthor_network.json", {
-        "nodes": nodes,
-        "edges": edges,
+        "nodes": [
+            {
+                "id": n,
+                "papers": author_counter[n],
+                "group": community_map.get(n, -1),
+                "degree": round(degree_centrality.get(n, 0), 4),
+            }
+            for n in G.nodes()
+        ],
+        "edges": [
+            {"source": a, "target": b, "weight": w}
+            for a, b, w in G.edges(data='weight')
+        ],
         "n_communities": len(communities),
     })
 
-    print("\nAll JSON files written to", os.path.abspath(OUT_DIR))
+    print(f"\nAll JSON files written to {OUT_DIR} in {(time.time() - started) / 60:.1f} min")
 
 
 if __name__ == "__main__":

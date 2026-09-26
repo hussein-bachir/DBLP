@@ -74,10 +74,30 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
    (or any pinned CDN asset) stops rendering, check the network tab / CDN
    response status before assuming the app code is wrong.
 
+6. **`dblp_after_2018.csv` is derived from the biased 5M-record sample, not
+   the full parse.** `scripts/filter_after_2018.py` defaults `INPUT_CSV` to
+   `dblp_sample.csv`, so anything built on `dblp_after_2018.csv` (the
+   `scripts/analyze_*.py` / `visualize_dblp*.py` charts, and the first
+   version of the dashboard) covered only ~1.73M of the 3.45M papers dated
+   2019-2025, and showed 24% journal articles versus the true ~52%. The
+   dashboard now reads `dblp_full.csv` directly (branch `all-years`); the
+   `scripts/` charts still need `INPUT_CSV` pointed at `dblp_full.csv` and
+   `filter_after_2018.py` re-run before their numbers are usable.
+
 ## Current task: the JS dashboard
-- `dashboard/preprocess.py` aggregates the CSV into small JSON files
-  (under `dashboard/data/`) since the raw CSV (millions of rows) is too
-  large to load client-side.
+- `dashboard/preprocess.py` streams `data/processed/dblp_full.csv` (chunked,
+  two passes, ~6 min) into small JSON files (under `dashboard/data/`) since
+  the raw CSV (8.4M rows) is too large to load client-side.
+- **All-years version (branch `all-years`)**: covers every record 1936-2025
+  (8,051,300 records; 372,476 dated 2026+ or with no valid year are left
+  out because DBLP is still indexing them). `master` still has the earlier
+  2019-2025-from-the-sample dashboard. Ratio/average charts open at 1970 with
+  a year slider reaching back to 1936, because the early decades have
+  too few records for stable shares. Findings worth knowing: `journals/corr`
+  (the arXiv mirror) is ~10% of all records and dominates top venues; the
+  Remote Sensing journal has zero 2025 records in DBLP itself (indexing gap,
+  not a real drop); the "transformer" title keyword also matches electrical
+  transformers, which is the ~1% bump before 2017.
 - Design system: deep ink-navy background (#12172B), brass-gold accent
   (#C9A227), verdigris secondary accent (#5B8A82); Source Serif 4 for
   headlines, IBM Plex Sans/Mono for body/data -- deliberately avoiding
@@ -89,12 +109,12 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
   opening `index.html` directly will fail on the JSON fetches due to
   CORS restrictions on the `file://` protocol.
 - Status: built, run, and verified rendering correctly (headless-browser
-  screenshot check, zero console errors, zero failed requests). Ran
-  `preprocess.py` against `dblp_after_2018.csv` (1,733,499 records after
-  the 2019-2025 filter) to produce the 13 JSON files under
-  `dashboard/data/`, served the folder with `python -m http.server`, and
-  fixed two real bugs found only by actually rendering the page (not
-  visible from reading the code):
+  screenshot check, zero console errors, zero failed requests). The first
+  version ran `preprocess.py` against `dblp_after_2018.csv` (1,733,499
+  records, the biased sample -- see bug #6); the all-years branch re-ran it
+  against the full parse. Either way it produces the 13 JSON files under
+  `dashboard/data/`, served with `python -m http.server`. Real bugs found
+  only by actually rendering the page (not visible from reading the code):
   - the pinned `echarts@5.5.1` CDN URL 404'd (see bug #5 above) --
     bumped to `echarts@6.1.0`.
   - the "Top Venues" bar chart's value-axis tick labels overlapped

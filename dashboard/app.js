@@ -75,10 +75,35 @@
     return chart;
   }
 
+  // Scroll/drag + slider zoom over a category year axis. The data covers every
+  // year, but shares and averages are noisy in the sparse early decades, so
+  // ratio-style charts open on `startYear` and the slider reaches back further.
+  function yearZoom(years, startYear) {
+    var startIdx = 0;
+    if (startYear) {
+      for (var i = 0; i < years.length; i++) {
+        if (years[i] >= startYear) { startIdx = i; break; }
+      }
+    }
+    return [
+      { type: "inside", startValue: startIdx, endValue: years.length - 1 },
+      {
+        type: "slider", startValue: startIdx, endValue: years.length - 1,
+        height: 18, bottom: 6, borderColor: COLOR.hairline,
+        backgroundColor: "rgba(255,255,255,0.03)",
+        fillerColor: "rgba(201,162,39,0.18)",
+        handleStyle: { color: COLOR.gold, borderColor: COLOR.gold },
+        moveHandleStyle: { color: COLOR.goldDim },
+        dataBackground: { lineStyle: { color: COLOR.hairline }, areaStyle: { color: "rgba(255,255,255,0.04)" } },
+        textStyle: { color: COLOR.textFaint, fontFamily: "IBM Plex Mono" },
+      },
+    ];
+  }
+
   // ---------- stat strip ----------
   function renderOverview(data) {
     var stats = [
-      { label: "Records (2019–25)", value: fmt(data.total_records) },
+      { label: "Records", value: fmt(data.total_records) },
       { label: "Distinct authors", value: fmt(data.distinct_authors) },
       { label: "Distinct venues", value: fmt(data.distinct_venues) },
       { label: "Year range", value: data.year_min + "–" + data.year_max },
@@ -88,12 +113,20 @@
       return '<div class="stat"><div class="stat-label">' + s.label +
         '</div><div class="stat-value">' + s.value + "</div></div>";
     }).join("");
+
+    $("eyebrow-years").textContent = data.year_min + "–" + data.year_max;
+    $("scope-note").textContent = "Every article and conference paper in the DBLP dump from " +
+      data.year_min + " through " + data.year_max + " (" + fmt(data.total_records) +
+      " records). " + fmt(data.excluded_records) + " records dated after " + data.year_max +
+      " are left out because DBLP is still indexing those years and they understate real output.";
   }
 
   // ---------- publications per year ----------
   function renderPubsPerYear(rows) {
+    var years = rows.map(function (r) { return r.year; });
     makeChart("chart-pubs-year", {
-      grid: baseGrid(),
+      grid: baseGrid({ bottom: 64 }),
+      dataZoom: yearZoom(years, null),
       tooltip: tooltipCommon({ trigger: "axis" }),
       xAxis: Object.assign({ type: "category", data: rows.map(function (r) { return r.year; }) }, axisCommon()),
       yAxis: Object.assign({ type: "value" }, axisCommon()),
@@ -101,7 +134,7 @@
         type: "line",
         data: rows.map(function (r) { return r.count; }),
         smooth: true,
-        symbolSize: 7,
+        showSymbol: false,
         lineStyle: { color: COLOR.gold, width: 2.5 },
         itemStyle: { color: COLOR.gold },
         areaStyle: { color: "rgba(201,162,39,0.10)" },
@@ -117,13 +150,13 @@
       legend: { bottom: 0, textStyle: { color: COLOR.textSecondary, fontFamily: "IBM Plex Sans" } },
       series: [{
         type: "pie",
-        radius: ["45%", "72%"],
+        radius: ["38%", "72%"],
         avoidLabelOverlap: true,
         itemStyle: { borderColor: COLOR.card, borderWidth: 2 },
         // Outside labels ("Conference paper") get clipped at the canvas
         // edge in a narrow card -- the legend below already names each
         // slice, so show only the share inside the ring.
-        label: { show: true, position: "inside", formatter: "{d}%", color: COLOR.ink, fontFamily: "IBM Plex Mono", fontWeight: 600 },
+        label: { show: true, position: "inside", formatter: function (p) { return Math.round(p.percent) + "%"; }, color: COLOR.ink, fontFamily: "IBM Plex Mono", fontWeight: 600 },
         labelLine: { show: false },
         color: [COLOR.gold, COLOR.verdigris],
         data: rows.map(function (r) { return { name: labels[r.type] || r.type, value: r.count }; }),
@@ -179,16 +212,18 @@
 
   // ---------- avg team size over time ----------
   function renderTeamSize(rows) {
+    var years = rows.map(function (r) { return r.year; });
     makeChart("chart-team-size", {
-      grid: baseGrid(),
+      grid: baseGrid({ bottom: 64 }),
+      dataZoom: yearZoom(years, 1970),
       tooltip: tooltipCommon({ trigger: "axis" }),
-      xAxis: Object.assign({ type: "category", data: rows.map(function (r) { return r.year; }) }, axisCommon()),
+      xAxis: Object.assign({ type: "category", data: years }, axisCommon()),
       yAxis: Object.assign({ type: "value", scale: true }, axisCommon()),
       series: [{
         type: "line",
         data: rows.map(function (r) { return r.avg_authors; }),
         smooth: true,
-        symbolSize: 7,
+        showSymbol: false,
         lineStyle: { color: COLOR.rose, width: 2.5 },
         itemStyle: { color: COLOR.rose },
       }],
@@ -212,16 +247,18 @@
 
   // ---------- distinct venues per year ----------
   function renderVenuesPerYear(rows) {
+    var years = rows.map(function (r) { return r.year; });
     makeChart("chart-venues-year", {
-      grid: baseGrid(),
+      grid: baseGrid({ bottom: 64 }),
+      dataZoom: yearZoom(years, 1970),
       tooltip: tooltipCommon({ trigger: "axis" }),
-      xAxis: Object.assign({ type: "category", data: rows.map(function (r) { return r.year; }) }, axisCommon()),
+      xAxis: Object.assign({ type: "category", data: years }, axisCommon()),
       yAxis: Object.assign({ type: "value" }, axisCommon()),
       series: [{
         type: "line",
         data: rows.map(function (r) { return r.distinct_venues; }),
         smooth: true,
-        symbolSize: 7,
+        showSymbol: false,
         lineStyle: { color: COLOR.sage, width: 2.5 },
         itemStyle: { color: COLOR.sage },
       }],
@@ -229,24 +266,27 @@
   }
 
   // ---------- multi-line helper (topic trends / venue comparison) ----------
-  function renderMultiLine(domId, payload, yName, valueFormatter) {
+  function renderMultiLine(domId, payload, yName, startYear) {
     var years = payload.years;
     var keys = Object.keys(payload.series);
     makeChart(domId, {
-      grid: baseGrid({ right: 24 }),
+      grid: baseGrid({ right: 24, bottom: 64 }),
+      dataZoom: yearZoom(years, startYear),
       tooltip: tooltipCommon({ trigger: "axis" }),
       legend: { top: 0, textStyle: { color: COLOR.textSecondary, fontFamily: "IBM Plex Sans" } },
       color: CATEGORICAL,
       xAxis: Object.assign({ type: "category", data: years }, axisCommon()),
       yAxis: Object.assign({ type: "value", name: yName, nameTextStyle: { color: COLOR.textFaint } }, axisCommon()),
-      series: keys.map(function (k) {
+      series: keys.map(function (k, i) {
         return {
           name: k,
           type: "line",
           data: payload.series[k],
           smooth: true,
-          symbolSize: 6,
-          lineStyle: { width: 2.25 },
+          showSymbol: false,
+          // the palette has near-twin golds/greens; dash the later series so
+          // they stay distinguishable where lines overlap
+          lineStyle: { width: 2.25, type: i >= 6 ? "dashed" : "solid" },
         };
       }),
     });
@@ -254,18 +294,23 @@
 
   // ---------- co-authorship network ----------
   function renderNetwork(payload) {
+    // Size and label thresholds are relative to the data (not fixed paper
+    // counts) so the graph stays readable whatever year range was aggregated.
+    var papers = payload.nodes.map(function (n) { return n.papers; }).sort(function (a, b) { return b - a; });
+    var maxPapers = papers[0];
+    var labelThreshold = papers[Math.min(14, papers.length - 1)];
     var nodes = payload.nodes.map(function (n) {
       return {
         id: n.id,
         name: n.id,
-        symbolSize: 6 + Math.sqrt(n.papers) * 2.4,
+        symbolSize: 8 + 30 * Math.sqrt(n.papers / maxPapers),
         value: n.papers,
         category: n.group,
         itemStyle: { color: CATEGORICAL[n.group % CATEGORICAL.length] },
       };
     });
     var edges = payload.edges.map(function (e) {
-      return { source: e.source, target: e.target, value: e.weight, lineStyle: { width: Math.min(e.weight, 6) * 0.4, opacity: 0.25 } };
+      return { source: e.source, target: e.target, value: e.weight, lineStyle: { width: 0.5 + Math.min(e.weight, 20) * 0.08, opacity: 0.35 } };
     });
 
     makeChart("chart-network", {
@@ -280,17 +325,17 @@
         layout: "force",
         roam: true,
         draggable: true,
-        force: { repulsion: 90, edgeLength: [30, 90], gravity: 0.15 },
+        force: { repulsion: 120, edgeLength: [30, 100], gravity: 0.15 },
         label: {
           show: true,
           position: "right",
           color: COLOR.textSecondary,
           fontFamily: "IBM Plex Mono",
           fontSize: 10,
-          formatter: function (p) { return p.data.value >= 250 ? p.data.name : ""; },
+          formatter: function (p) { return p.data.value >= labelThreshold ? p.data.name : ""; },
         },
         edgeSymbol: ["none", "none"],
-        lineStyle: { color: COLOR.hairline, curveness: 0.1 },
+        lineStyle: { color: COLOR.textFaint, curveness: 0.1 },
         data: nodes,
         links: edges,
       }],
@@ -330,8 +375,8 @@
       renderAuthorProductivity(data.authorProductivity);
       renderVenuesPerYear(data.venuesPerYear);
       renderHBar("chart-title-words", data.titleWords, "word", "count", COLOR.slate);
-      renderMultiLine("chart-topic-trends", data.topicTrends, "% of titles");
-      renderMultiLine("chart-venue-comparison", data.venueComparison, "papers");
+      renderMultiLine("chart-topic-trends", data.topicTrends, "% of titles", 1970);
+      renderMultiLine("chart-venue-comparison", data.venueComparison, "papers", 1970);
       renderNetwork(data.network);
 
       window.addEventListener("resize", function () {
