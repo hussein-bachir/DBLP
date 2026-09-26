@@ -31,6 +31,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import author_index as ai
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+# the old vanilla-JS dashboard, still served at / until the React app replaces it
+LEGACY_DASHBOARD = ROOT / "dashboard"
 INDEX_PATH = os.environ.get("AUTHOR_INDEX_PATH", ai.DB_PATH)
 NOT_BUILT = "Author index not built yet. Run: python build_author_index.py"
 
@@ -208,12 +211,12 @@ def _static(path: Path, media_type: str) -> FileResponse:
 
 @app.get("/", include_in_schema=False)
 def home():
-    return _static(HERE / "index.html", WEB_FILES["index.html"])
+    return _static(LEGACY_DASHBOARD / "index.html", WEB_FILES["index.html"])
 
 
 @app.get("/data/{name}", include_in_schema=False)
 def data_file(name: str):
-    path = HERE / "data" / name
+    path = LEGACY_DASHBOARD / "data" / name
     if not DATA_FILE.fullmatch(name) or not path.is_file():
         raise HTTPException(404, "not found")
     return _static(path, "application/json")
@@ -224,7 +227,7 @@ def data_file(name: str):
 # (vite's `base`). In development, run `npm run dev` instead: Vite serves the app
 # and proxies /api here.
 
-FRONTEND_DIST = HERE.parent / "frontend" / "dist"
+FRONTEND_DIST = ROOT / "frontend" / "dist"
 FRONTEND_NOT_BUILT = "React app not built yet. In frontend/ run: npm install && npm run build"
 APP_MEDIA_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -262,4 +265,4 @@ def react_app(path: str):
 def web_file(name: str):
     if name not in WEB_FILES:
         raise HTTPException(404, "not found")
-    return _static(HERE / name, WEB_FILES[name])
+    return _static(LEGACY_DASHBOARD / name, WEB_FILES[name])

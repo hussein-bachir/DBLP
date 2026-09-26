@@ -3,7 +3,7 @@ import os
 import re
 from lxml import etree
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 xml_file_path = os.path.join(REPO_ROOT, "data", "raw", "dblp.xml.gz")
 dtd_file_path = os.path.join(REPO_ROOT, "data", "raw", "dblp.dtd")
 

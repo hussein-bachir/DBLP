@@ -5,27 +5,31 @@ Extract `article`/`inproceedings` records (key, title, year, authors) from the
 full DBLP XML dump, analyze them, and present findings as an interactive
 JS dashboard (not Streamlit) for a master's course assignment.
 
-## Files in this project (reorganized -- see below)
+## Files in this project
+Layout as of the repository cleanup (data flows `pipeline/` -> `data/` ->
+`backend/` -> `frontend/`; older entries in this log use the previous names
+`scripts/`, `debug/` and `dashboard/preprocess.py`, mapped below):
 - `data/raw/dblp.xml.gz`, `data/raw/dblp.dtd` -- raw source data
   (downloaded from dblp.org), gitignored
-- `data/processed/*.csv` -- parser/filter output (`dblp_full.csv`,
-  `dblp_sample.csv`, `dblp_after_2018.csv`, ...), gitignored
-- `scripts/parse_dblp.py` -- the working, memory-safe full-dataset parser
-- `scripts/visualize_dblp.py`, `scripts/visualize_dblp_extra.py` --
-  matplotlib exploratory charts, saved to `charts/` (gitignored)
-- `scripts/analyze_coauthor_network.py`, `scripts/analyze_topic_trends.py`,
-  `scripts/analyze_venue_comparison.py` -- deeper analytical scripts
-- `debug/` -- standalone diagnostic scripts used to root-cause the parser
-  bugs below; reference/history, not part of the regular pipeline
-- `dashboard/` -- the JS dashboard (index.html, app.js, style.css,
-  preprocess.py, data/*.json) -- built, run, and verified working
-  (see "Current task" below)
+- `data/processed/*.csv`, `authors.sqlite` -- parser output and derived files
+  (`dblp_full.csv`, ...), gitignored
+- `pipeline/parse_dblp.py` (was `scripts/`) -- the working, memory-safe
+  full-dataset parser; `pipeline/debug/` (was `debug/`, plus the limited-sample
+  `parse_dblp_200k.py`) -- diagnostics used to root-cause the parser bugs below
+- `backend/` -- `api.py` (FastAPI), `server.py`, `author_index.py`,
+  `build_author_index.py`, `build_chart_data.py` (was
+  `dashboard/preprocess.py`), `export_openapi.py`
+- `frontend/` -- the React + Vite + TypeScript app
+- `dashboard/` -- the legacy vanilla-JS dashboard (index.html, app.js,
+  author-search.js, style.css, data/*.json), being retired
+- `analysis/` (was `scripts/`) -- the original exploratory matplotlib scripts
+  (`visualize_dblp*.py`, `analyze_*.py`, `filter_after_2018.py`), charts saved
+  to `analysis/charts/` (gitignored)
 
-All scripts resolve `data/`/`charts/` paths relative to the repo root via a
-`REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`
-constant, so they work regardless of the invoking working directory. The
-repo is a local git repository (`git init`'d, no remote) with the large
-data/`venv/`/log files gitignored -- see `.gitignore`.
+Every Python script resolves its paths from its own location (a
+`REPO_ROOT`/`HERE` built from `__file__`), so it works regardless of the
+invoking working directory. The repo is a local git repository (no remote)
+with the large data/`venv/`/log files gitignored -- see `.gitignore`.
 
 ## Non-obvious bugs already solved (don't reintroduce these)
 
@@ -75,31 +79,31 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
    response status before assuming the app code is wrong.
 
 6. **`dblp_after_2018.csv` is derived from the biased 5M-record sample, not
-   the full parse.** `scripts/filter_after_2018.py` defaults `INPUT_CSV` to
+   the full parse.** `analysis/filter_after_2018.py` defaults `INPUT_CSV` to
    `dblp_sample.csv`, so anything built on `dblp_after_2018.csv` (the
-   `scripts/analyze_*.py` / `visualize_dblp*.py` charts, and the first
+   `analysis/analyze_*.py` / `visualize_dblp*.py` charts, and the first
    version of the dashboard) covered only ~1.73M of the 3.45M papers dated
    2019-2025, and showed 24% journal articles versus the true ~52%. The
    dashboard now reads `dblp_full.csv` directly (branch `all-years`); the
-   `scripts/` charts still need `INPUT_CSV` pointed at `dblp_full.csv` and
+   `analysis/` charts still need `INPUT_CSV` pointed at `dblp_full.csv` and
    `filter_after_2018.py` re-run before their numbers are usable.
 
 7. **Accented names in `dblp_full.csv` are mojibake.** `parse_dblp.py` (and
-   `parse_dblp_200k.py`, `debug/`) decode the dump as `iso-8859-1`, but it is
+   `parse_dblp_200k.py`, `pipeline/debug/`) decode the dump as `iso-8859-1`, but it is
    UTF-8, so `Mérouane Debbah` is stored as `MÃ©rouane Debbah`. All 241,638
    non-ASCII author names (5.7% of 4.26M authors) are affected, and none are
    clean. Found while building author search: a search for `cudré` could not
    match `CudrÃ©-Mauroux`. Fixed downstream, not at the source:
-   `dashboard/author_index.repair_text()` re-encodes as Latin-1 and decodes as
+   `backend/author_index.repair_text()` re-encodes as Latin-1 and decodes as
    UTF-8 (lossless; strings that aren't garbled are left alone), and both
-   `build_author_index.py` and `preprocess.py` apply it. The parsers and the
-   `scripts/` charts are unchanged, so those still show garbled names. The
+   `build_author_index.py` and `build_chart_data.py` apply it. The parsers and the
+   `analysis/` charts are unchanged, so those still show garbled names. The
    proper fix is `encoding='utf-8'` in the parsers plus a re-parse (not done).
    Related, unfixed: `elem.findtext('title')` keeps only the text before the
    first inline tag, so titles containing `<i>`/`<sub>` markup are cut short.
 
 ## Current task: the JS dashboard
-- `dashboard/preprocess.py` streams `data/processed/dblp_full.csv` (chunked,
+- `backend/build_chart_data.py` (formerly `dashboard/preprocess.py`) streams `data/processed/dblp_full.csv` (chunked,
   two passes, ~6 min) into small JSON files (under `dashboard/data/`) since
   the raw CSV (8.4M rows) is too large to load client-side.
 - **All-years version (branch `all-years`)**: covers every record 1936-2025
@@ -139,7 +143,7 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
   `#author=<id>` in the URL deep-links to a profile (ids change if the index
   is rebuilt from a different CSV).
 - **Backend migration, step 1 of 3 (branch `fastapi-backend`)**: the stdlib
-  `http.server` backend was replaced by FastAPI (`dashboard/api.py`), with the
+  `http.server` backend was replaced by FastAPI (`backend/api.py`), with the
   same `/api/*` contract so the vanilla front end is unchanged. Verified by
   running old and new servers side by side: 35 of 35 success responses
   (15 searches, 15 profiles, 3 paging calls, status) were identical JSON.

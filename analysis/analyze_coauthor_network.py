@@ -8,7 +8,7 @@ from collections import Counter
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PATH = os.path.join(REPO_ROOT, "data", "processed", "dblp_after_2018.csv")
-CHARTS_DIR = os.path.join(REPO_ROOT, "charts")
+CHARTS_DIR = os.path.join(REPO_ROOT, "analysis", "charts")
 os.makedirs(CHARTS_DIR, exist_ok=True)
 TOP_N_AUTHORS = 300  # restrict the network to the most prolific authors to keep it tractable
 

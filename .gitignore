@@ -1,10 +1,10 @@
-# Raw + derived data (multi-GB, regenerate via scripts/parse_dblp.py / filter_after_2018.py)
+# Raw + derived data (multi-GB, regenerate via pipeline/parse_dblp.py / analysis/filter_after_2018.py)
 data/raw/dblp.xml.gz
 data/processed/*.csv
 data/processed/*.sqlite*
 
-# matplotlib/seaborn chart output (regenerate via scripts/visualize_dblp*.py / analyze_*.py)
-charts/*.png
+# matplotlib/seaborn chart output (regenerate via analysis/visualize_dblp*.py / analyze_*.py)
+analysis/charts/*.png
 
 # React app: dependencies and build output (regenerate with npm install / npm run build)
 frontend/node_modules/
@@ -13,8 +13,7 @@ frontend/dist/
 # Python virtual environment
 venv/
 
-# Local server logs
-dashboard/server.log
-
+# Local logs and caches
+*.log
 __pycache__/
 *.pyc

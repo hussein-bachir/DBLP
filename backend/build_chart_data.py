@@ -1,5 +1,5 @@
 """Aggregate dblp_full.csv (every article/inproceedings record, all years) into
-small JSON files under data/ for the client-side dashboard. The raw CSV has
+small JSON files for the client-side dashboard. The raw CSV has
 millions of rows and can't be loaded in the browser, so every heavy
 computation (author counts, the co-authorship network, keyword trends...)
 happens here, once, with pandas/networkx.
@@ -8,7 +8,7 @@ The CSV is streamed in chunks (twice: once for all the counters, once for the
 co-authorship edges, which need the global top-N authors first) so memory stays
 bounded even at ~8.4M rows.
 
-Mirrors the logic in the ../scripts/analyze_*.py / visualize_dblp*.py
+Mirrors the logic in the ../analysis/analyze_*.py / visualize_dblp*.py
 scripts, but writes JSON instead of matplotlib PNGs.
 """
 import json
@@ -25,7 +25,8 @@ from author_index import repair_text
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(HERE, "..", "data", "processed", "dblp_full.csv")
-OUT_DIR = os.path.join(HERE, "data")
+# still the legacy dashboard's data folder; the React app takes over in the next step
+OUT_DIR = os.path.join(HERE, "..", "dashboard", "data")
 # Upper bound trims the still-being-indexed tail (2026 partial, 2027 "to
 # appear"), see CONTEXT.md. Lower bound is just "everything".
 YEAR_MIN, YEAR_MAX = 1900, 2025
