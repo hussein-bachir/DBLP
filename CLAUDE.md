@@ -15,9 +15,12 @@ read it before making changes and keep it current as you work.
 
 - Windows, PowerShell primary shell. Git repo (`git init`'d locally; no
   remote configured).
-- Python 3.12 venv at `venv/` (not committed, and no `requirements.txt`
-  exists). Installed: `lxml`, `pandas`, `numpy`, `matplotlib`, `seaborn`,
-  `networkx`.
+- Python 3.12 venv at `venv/` (not committed). Dependencies are pinned in
+  `requirements.txt` (`lxml`, `pandas`, `numpy`, `matplotlib`, `seaborn`,
+  `networkx`, plus `fastapi` and `uvicorn` for the author-search backend):
+  `.\venv\Scripts\python.exe -m pip install -r requirements.txt`. Anything
+  that runs `dashboard/server.py` needs the FastAPI packages, so use the venv
+  interpreter, not a bare system Python.
 - Run scripts via the venv interpreter directly, e.g.:
   `.\venv\Scripts\python.exe scripts\parse_dblp.py`
 - Every script under `scripts/`, `debug/`, and `dashboard/preprocess.py`
@@ -42,9 +45,12 @@ read it before making changes and keep it current as you work.
 - `dashboard/` — the JS dashboard: `index.html`, `app.js`, `style.css`,
   `preprocess.py`, and its output `data/*.json` (small, and committed, since
   it's what the charts read at runtime). Author lookup adds
-  `author-search.js` (front end), `server.py` (static files + JSON API),
-  `author_index.py` (query layer) and `build_author_index.py`, which builds
-  `data/processed/authors.sqlite` (~2.4 GB, gitignored, ~6 min).
+  `author-search.js` (front end), `api.py` (the FastAPI app: typed
+  `/api/*` endpoints + only the web assets as static files; OpenAPI docs at
+  `/docs`), `server.py` (launcher: `python server.py [port]` runs `api.py`
+  under uvicorn on 127.0.0.1), `author_index.py` (stdlib-only query layer that
+  `api.py` wraps; keep HTTP concerns out of it) and `build_author_index.py`,
+  which builds `data/processed/authors.sqlite` (~2.4 GB, gitignored, ~6 min).
 
 ## Data pipeline (run in this order)
 
@@ -82,11 +88,15 @@ read it before making changes and keep it current as you work.
    SQLite author index (papers, authors, authorship, a trigram full-text
    index over accent-folded names, and a word list for typo matching).
    Then run `python server.py [port]` from `dashboard/` (default 8000,
-   localhost only). It serves the dashboard like `python -m http.server`
-   does and adds `/api/search`, `/api/author`, `/api/papers` for the search
-   box at the top of the page. On a plain static server the charts still
-   work and the search box explains what to run. Rebuild the index whenever
-   `dblp_full.csv` changes.
+   localhost only). The FastAPI app serves the dashboard and
+   `/api/status`, `/api/search`, `/api/author`, `/api/papers` (see `/docs`)
+   for the search box at the top of the page. The `/api/*` JSON contract
+   (field names, `{"error": ...}` bodies, 503 + `"ready": false` when the
+   index is missing) is what `author-search.js` depends on; the old stdlib
+   server returned byte-identical payloads, so change models and front end
+   together. On a plain static server the charts still work and the search
+   box explains what to run. Rebuild the index whenever `dblp_full.csv`
+   changes. `AUTHOR_INDEX_PATH` overrides the index location.
 
 All DBLP `key` values look like `conf/venue/id` or `journals/venue/id`;
 venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.

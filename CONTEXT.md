@@ -138,6 +138,19 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
   plain static server the box explains what to run and the charts still work.
   `#author=<id>` in the URL deep-links to a profile (ids change if the index
   is rebuilt from a different CSV).
+- **Backend migration, step 1 of 3 (branch `fastapi-backend`)**: the stdlib
+  `http.server` backend was replaced by FastAPI (`dashboard/api.py`), with the
+  same `/api/*` contract so the vanilla front end is unchanged. Verified by
+  running old and new servers side by side: 35 of 35 success responses
+  (15 searches, 15 profiles, 3 paging calls, status) were identical JSON.
+  Deliberate differences: bad input returns 422 (was 400), `id=0` is a 422
+  (was a 404), a `q` over 500 chars is rejected (was truncated to 100), only
+  the four web assets and `data/*.json` are served (the old server also served
+  the `.py` sources), and `/docs` + `/openapi.json` now exist. Plan: step 2 is
+  React + Vite + TypeScript for search/profile (TanStack Query for calls,
+  Vite dev proxy to this API, so CORS isn't needed), step 3 moves the charts.
+  Note: a running `server.py` keeps the code it started with; restart it to
+  pick up backend changes.
 - Design system: deep ink-navy background (#12172B), brass-gold accent
   (#C9A227), verdigris secondary accent (#5B8A82); Source Serif 4 for
   headlines, IBM Plex Sans/Mono for body/data -- deliberately avoiding
