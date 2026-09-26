@@ -39,9 +39,12 @@ read it before making changes and keep it current as you work.
 - `debug/` — standalone diagnostic scripts (`diagnose_parse.py`,
   `watch_window.py`) used to root-cause the parser bugs below; reference/
   history, not part of the regular pipeline.
-- `dashboard/` — the static JS dashboard: `index.html`, `app.js`,
-  `style.css`, `preprocess.py`, and its output `data/*.json` (small, and
-  committed, since it's what the dashboard actually reads at runtime).
+- `dashboard/` — the JS dashboard: `index.html`, `app.js`, `style.css`,
+  `preprocess.py`, and its output `data/*.json` (small, and committed, since
+  it's what the charts read at runtime). Author lookup adds
+  `author-search.js` (front end), `server.py` (static files + JSON API),
+  `author_index.py` (query layer) and `build_author_index.py`, which builds
+  `data/processed/authors.sqlite` (~2.4 GB, gitignored, ~6 min).
 
 ## Data pipeline (run in this order)
 
@@ -72,10 +75,18 @@ read it before making changes and keep it current as you work.
    `dashboard/data/`, since the raw CSV is far too large to load
    client-side. It reads `dblp_full.csv` directly, so it does not depend on
    `filter_after_2018.py`. Built, run, and verified rendering
-   correctly (see CONTEXT.md for the bugs found/fixed along the way). Serve
-   with `python -m http.server` from within `dashboard/` — opening
+   correctly (see CONTEXT.md for the bugs found/fixed along the way). Opening
    `index.html` directly breaks the JSON `fetch()` calls under the
-   `file://` CORS restriction.
+   `file://` CORS restriction, so serve it over HTTP.
+7. `dashboard/build_author_index.py` — one pass over `dblp_full.csv` into the
+   SQLite author index (papers, authors, authorship, a trigram full-text
+   index over accent-folded names, and a word list for typo matching).
+   Then run `python server.py [port]` from `dashboard/` (default 8000,
+   localhost only). It serves the dashboard like `python -m http.server`
+   does and adds `/api/search`, `/api/author`, `/api/papers` for the search
+   box at the top of the page. On a plain static server the charts still
+   work and the search box explains what to run. Rebuild the index whenever
+   `dblp_full.csv` changes.
 
 All DBLP `key` values look like `conf/venue/id` or `journals/venue/id`;
 venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
@@ -108,6 +119,16 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   for stable shares.
 - On Windows, avoid multi-line `python -c "..."` one-liners (cmd doesn't
   handle them) — write a throwaway `.py` script instead.
+- **Non-ASCII text in `dblp_full.csv` is garbled** (UTF-8 bytes decoded as
+  Latin-1: `MÃ©rouane`). `parse_dblp.py` opens the dump as `iso-8859-1`, but
+  the dump is UTF-8. Every non-ASCII author name is affected (~240k authors).
+  `author_index.repair_text()` reverses it losslessly and is applied in
+  `build_author_index.py` and `preprocess.py`; any new consumer of the CSV
+  that shows or matches names must do the same (or the parser be fixed and
+  the dump re-parsed).
+- DBLP separates people who share a name with a trailing 4-digit number
+  ("Hussein Hazimeh 0001" / "0002" are different people). Keep the suffix in
+  stored names; strip it only for matching (`author_index.fold`).
 - **A pinned CDN library version can 404 silently.** `dashboard/index.html`
   loads ECharts from cdnjs pinned to an exact version — if charts stop
   rendering, check the browser network tab / CDN response status before

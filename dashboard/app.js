@@ -69,6 +69,13 @@
   function makeChart(domId, option) {
     var el = $(domId);
     if (!el) return null;
+    // re-rendering into the same element (e.g. the author profile charts)
+    // must not leak the previous instance
+    var existing = echarts.getInstanceByDom(el);
+    if (existing) {
+      existing.dispose();
+      charts = charts.filter(function (c) { return c !== existing; });
+    }
     var chart = echarts.init(el, null, { renderer: "canvas" });
     chart.setOption(option);
     charts.push(chart);
@@ -516,7 +523,25 @@
     els.minW.addEventListener("input", function () { apply(); });
 
     apply();
+
+    // lets the author profile (author-search.js) highlight someone here
+    window.dashboard.network = {
+      has: function (name) { return Object.prototype.hasOwnProperty.call(rankOf, name); },
+      select: function (name) { select(name); },
+    };
   }
+
+  // shared with author-search.js, which loads after this file
+  window.dashboard = {
+    COLOR: COLOR,
+    fmt: fmt,
+    makeChart: makeChart,
+    baseGrid: baseGrid,
+    axisCommon: axisCommon,
+    tooltipCommon: tooltipCommon,
+    abbrevNumber: abbrevNumber,
+    network: null,
+  };
 
   // ---------- boot ----------
   var files = {

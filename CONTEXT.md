@@ -84,6 +84,20 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
    `scripts/` charts still need `INPUT_CSV` pointed at `dblp_full.csv` and
    `filter_after_2018.py` re-run before their numbers are usable.
 
+7. **Accented names in `dblp_full.csv` are mojibake.** `parse_dblp.py` (and
+   `parse_dblp_200k.py`, `debug/`) decode the dump as `iso-8859-1`, but it is
+   UTF-8, so `Mérouane Debbah` is stored as `MÃ©rouane Debbah`. All 241,638
+   non-ASCII author names (5.7% of 4.26M authors) are affected, and none are
+   clean. Found while building author search: a search for `cudré` could not
+   match `CudrÃ©-Mauroux`. Fixed downstream, not at the source:
+   `dashboard/author_index.repair_text()` re-encodes as Latin-1 and decodes as
+   UTF-8 (lossless; strings that aren't garbled are left alone), and both
+   `build_author_index.py` and `preprocess.py` apply it. The parsers and the
+   `scripts/` charts are unchanged, so those still show garbled names. The
+   proper fix is `encoding='utf-8'` in the parsers plus a re-parse (not done).
+   Related, unfixed: `elem.findtext('title')` keeps only the text before the
+   first inline tag, so titles containing `<i>`/`<sub>` markup are cut short.
+
 ## Current task: the JS dashboard
 - `dashboard/preprocess.py` streams `data/processed/dblp_full.csv` (chunked,
   two passes, ~6 min) into small JSON files (under `dashboard/data/`) since
@@ -109,6 +123,21 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
   from the chart) so the highlight doesn't reshuffle the layout, widens the
   "authors shown" slider if the match is hidden, and restores it on clear.
   Slider changes do re-run the layout.
+- **Author lookup (search box at the top of the page)**: finds any of the
+  4.26M authors, not just the network's 150. Type a name (any word order, any
+  fragment of 3+ letters, accents optional); results show paper count, years
+  and top venues so people who share a name can be told apart -- e.g. DBLP has
+  two different "Hussein Hazimeh" (0001: 37 papers, ML/optimization venues;
+  0002: 25 papers, different venues and co-authors). If nothing matches
+  exactly, close spellings are tried ("hussein kenaan" finds "Hussein
+  Kanaan"). Picking a result opens a profile: papers per year, venues,
+  co-authors (click to jump to them), and the full publication list linked to
+  dblp.org. DBLP has no affiliation data, so the profile says so and the user
+  confirms identity from venues/co-authors. Needs `python server.py` and the
+  SQLite index (`build_author_index.py`, ~6 min, 2.4 GB, gitignored); on a
+  plain static server the box explains what to run and the charts still work.
+  `#author=<id>` in the URL deep-links to a profile (ids change if the index
+  is rebuilt from a different CSV).
 - Design system: deep ink-navy background (#12172B), brass-gold accent
   (#C9A227), verdigris secondary accent (#5B8A82); Source Serif 4 for
   headlines, IBM Plex Sans/Mono for body/data -- deliberately avoiding

@@ -1,6 +1,7 @@
 # Raw + derived data (multi-GB, regenerate via scripts/parse_dblp.py / filter_after_2018.py)
 data/raw/dblp.xml.gz
 data/processed/*.csv
+data/processed/*.sqlite*
 
 # matplotlib/seaborn chart output (regenerate via scripts/visualize_dblp*.py / analyze_*.py)
 charts/*.png
