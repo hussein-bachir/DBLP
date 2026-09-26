@@ -1,0 +1,573 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DBLP dashboard API",
+    "description": "Search researchers in the DBLP dump and read their publication profiles. Read-only.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/status": {
+      "get": {
+        "summary": "Status",
+        "description": "Whether the index is built, and how big it is.",
+        "operationId": "status_api_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "summary": "Search",
+        "description": "Find researchers by name: accent-insensitive substring match, then close spellings.",
+        "operationId": "search_api_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Any part of a name, in any word order",
+              "default": "",
+              "title": "Q"
+            },
+            "description": "Any part of a name, in any word order"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/author": {
+      "get": {
+        "summary": "Author",
+        "description": "A researcher's profile: totals, papers per year, venues, co-authors and newest papers.",
+        "operationId": "author_api_author_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/papers": {
+      "get": {
+        "summary": "Papers",
+        "description": "A page of a researcher's papers, newest first.",
+        "operationId": "papers_api_papers_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PapersPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CoAuthor": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "shared": {
+            "type": "integer",
+            "title": "Shared"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "shared"
+        ],
+        "title": "CoAuthor"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Paper": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "article",
+              "inproceedings"
+            ],
+            "title": "Type"
+          },
+          "venue": {
+            "type": "string",
+            "title": "Venue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title",
+          "year",
+          "type",
+          "venue"
+        ],
+        "title": "Paper"
+      },
+      "PapersPage": {
+        "properties": {
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/Paper"
+            },
+            "type": "array",
+            "title": "Papers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "papers"
+        ],
+        "title": "PapersPage"
+      },
+      "Profile": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "n_papers": {
+            "type": "integer",
+            "title": "N Papers"
+          },
+          "first_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Year"
+          },
+          "last_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Year"
+          },
+          "n_articles": {
+            "type": "integer",
+            "title": "N Articles"
+          },
+          "n_inproceedings": {
+            "type": "integer",
+            "title": "N Inproceedings"
+          },
+          "n_coauthors": {
+            "type": "integer",
+            "title": "N Coauthors"
+          },
+          "n_venues": {
+            "type": "integer",
+            "title": "N Venues"
+          },
+          "per_year": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Per Year"
+          },
+          "venues": {
+            "items": {
+              "$ref": "#/components/schemas/VenueCount"
+            },
+            "type": "array",
+            "title": "Venues"
+          },
+          "coauthors": {
+            "items": {
+              "$ref": "#/components/schemas/CoAuthor"
+            },
+            "type": "array",
+            "title": "Coauthors"
+          },
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/Paper"
+            },
+            "type": "array",
+            "title": "Papers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "n_papers",
+          "first_year",
+          "last_year",
+          "n_articles",
+          "n_inproceedings",
+          "n_coauthors",
+          "n_venues",
+          "per_year",
+          "venues",
+          "coauthors",
+          "papers"
+        ],
+        "title": "Profile"
+      },
+      "SearchResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "corrected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "results"
+        ],
+        "title": "SearchResponse"
+      },
+      "SearchResult": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "n_papers": {
+            "type": "integer",
+            "title": "N Papers"
+          },
+          "first_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Year"
+          },
+          "last_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Year"
+          },
+          "venues": {
+            "items": {
+              "$ref": "#/components/schemas/VenueCount"
+            },
+            "type": "array",
+            "title": "Venues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "n_papers",
+          "first_year",
+          "last_year",
+          "venues"
+        ],
+        "title": "SearchResult"
+      },
+      "Status": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "authors": {
+            "type": "integer",
+            "title": "Authors"
+          },
+          "papers": {
+            "type": "integer",
+            "title": "Papers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready",
+          "authors",
+          "papers"
+        ],
+        "title": "Status"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VenueCount": {
+        "properties": {
+          "venue": {
+            "type": "string",
+            "title": "Venue"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "venue",
+          "count"
+        ],
+        "title": "VenueCount"
+      }
+    }
+  }
+}

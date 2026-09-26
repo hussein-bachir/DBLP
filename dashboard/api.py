@@ -24,7 +24,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -217,6 +217,45 @@ def data_file(name: str):
     if not DATA_FILE.fullmatch(name) or not path.is_file():
         raise HTTPException(404, "not found")
     return _static(path, "application/json")
+
+
+# ------------------------------------------------- the React app (frontend/)
+# `npm run build` in frontend/ writes frontend/dist; it is served under /app/
+# (vite's `base`). In development, run `npm run dev` instead: Vite serves the app
+# and proxies /api here.
+
+FRONTEND_DIST = HERE.parent / "frontend" / "dist"
+FRONTEND_NOT_BUILT = "React app not built yet. In frontend/ run: npm install && npm run build"
+APP_MEDIA_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json",
+    ".map": "application/json",
+    ".svg": "image/svg+xml",
+}
+
+
+@app.get("/app", include_in_schema=False)
+def react_app_redirect():
+    return RedirectResponse("/app/")
+
+
+@app.get("/app/{path:path}", include_in_schema=False)
+def react_app(path: str):
+    index = FRONTEND_DIST / "index.html"
+    if not index.is_file():
+        raise HTTPException(404, FRONTEND_NOT_BUILT)
+    if path:
+        target = (FRONTEND_DIST / path).resolve()
+        if target.is_file() and FRONTEND_DIST.resolve() in target.parents:
+            # built assets carry a content hash in their name, so they can be cached for good
+            cache = "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
+            return FileResponse(target, media_type=APP_MEDIA_TYPES.get(target.suffix), headers={"Cache-Control": cache})
+        if Path(path).suffix:  # a file that isn't there: don't answer with the app's HTML
+            raise HTTPException(404, "not found")
+    # anything else is a client-side route (e.g. /app/author/123): the app handles it
+    return _static(index, APP_MEDIA_TYPES[".html"])
 
 
 @app.get("/{name}", include_in_schema=False)

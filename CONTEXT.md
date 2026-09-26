@@ -151,6 +151,23 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
   Vite dev proxy to this API, so CORS isn't needed), step 3 moves the charts.
   Note: a running `server.py` keeps the code it started with; restart it to
   pick up backend changes.
+- **Frontend migration, step 2 of 3 (branch `react-frontend`)**: `frontend/`
+  holds a React 19 + Vite 6 + TypeScript app for search and profiles (same
+  features as the vanilla search, served at `/app/`). TanStack Query handles
+  fetching (cancels superseded keystroke requests, caches profiles), React
+  Router the `/author/:id` URLs (real history/back/forward instead of
+  `#author=`), and API types are generated from the backend's OpenAPI schema.
+  40 unit/component tests; verified end to end in a browser (typing, keyboard
+  navigation, profile, back/forward without reload, paging, deep links,
+  unknown/malformed ids, missing index, a 390px mobile viewport, and Vite dev
+  mode with the proxy). "Highlight in network" is not in the React version
+  because the network still lives in the vanilla page (step 3).
+  Bugs the new tests/browser run found: (1) pressing Enter right after typing
+  opened a result from the PREVIOUS query, because the old list stays on screen
+  while the next loads -- Enter now only picks from results for exactly what is
+  typed, and otherwise queues "open the top match" until fresh results arrive
+  (same guard added to the vanilla page); (2) the status text said "2 matchs"
+  (naive pluralisation; also fixed in the vanilla page).
 - Design system: deep ink-navy background (#12172B), brass-gold accent
   (#C9A227), verdigris secondary accent (#5B8A82); Source Serif 4 for
   headlines, IBM Plex Sans/Mono for body/data -- deliberately avoiding

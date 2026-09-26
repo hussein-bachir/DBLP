@@ -45,7 +45,7 @@
     return first === last ? String(first) : first + "–" + last;
   }
 
-  function plural(n, word) { return dash.fmt(n) + " " + word + (n === 1 ? "" : "s"); }
+  function plural(n, word, many) { return dash.fmt(n) + " " + (n === 1 ? word : many || word + "s"); }
 
   function setStatus(text, isError) {
     els.status.textContent = text;
@@ -143,7 +143,7 @@
     els.list.hidden = false;
     els.input.setAttribute("aria-expanded", "true");
     setActive(0);
-    setStatus(plural(data.results.length, "match") + (data.corrected ? " (spelling corrected)" : "") +
+    setStatus(plural(data.results.length, "match", "matches") + (data.corrected ? " (spelling corrected)" : "") +
       ". Use ↑ ↓ and Enter, or click a name.");
   }
 
@@ -177,7 +177,8 @@
     else if (ev.key === "ArrowUp" && open) { ev.preventDefault(); setActive(state.active - 1); }
     else if (ev.key === "Enter") {
       ev.preventDefault();
-      if (open && state.options[state.active]) {
+      // only pick from a list that answers what is typed now, not an earlier query
+      if (open && state.options[state.active] && els.input.value.trim() === state.lastQuery) {
         openAuthor(state.options[state.active].id);
       } else if (els.input.value.trim().length >= 3) {
         clearTimeout(state.timer);

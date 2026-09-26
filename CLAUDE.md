@@ -27,7 +27,12 @@ read it before making changes and keep it current as you work.
   resolves its data paths from its own location (via a `REPO_ROOT` / `HERE`
   constant built from `__file__`), so they can be invoked from any working
   directory.
-- No test suite, linter, or build step in this project.
+- The Python side has no test suite, linter or build step. The React app in
+  `frontend/` has all three (see "Frontend commands" below).
+- Node 20.18 is installed, which is older than what current Vite (8.x, needs
+  20.19+) and Vitest 5 (needs 22.12+) require, so `frontend/` pins Vite 6,
+  Vitest 4.1 and TypeScript 5.9. Upgrading Node to 22 LTS would allow newer
+  majors; until then don't bump those without checking their `engines`.
 
 ## Layout
 
@@ -51,6 +56,30 @@ read it before making changes and keep it current as you work.
   under uvicorn on 127.0.0.1), `author_index.py` (stdlib-only query layer that
   `api.py` wraps; keep HTTP concerns out of it) and `build_author_index.py`,
   which builds `data/processed/authors.sqlite` (~2.4 GB, gitignored, ~6 min).
+
+- `frontend/` — the React + Vite + TypeScript app for researcher search and
+  profiles, served under `/app/`. It is step 2 of moving off the vanilla
+  dashboard; the charts and network still live in `dashboard/` until step 3, so
+  the two front ends coexist for now (`/` is the vanilla dashboard, `/app/` is
+  React). `src/api/schema.d.ts` is GENERATED from FastAPI's OpenAPI schema and
+  is committed, so building doesn't need Python. TanStack Query does the data
+  fetching, React Router the routes (`/author/:id`), and ECharts is wrapped in a
+  small component and only loaded when a profile is opened.
+
+## Frontend commands (run in `frontend/`)
+
+- `npm install` once; `npm run dev` for development (Vite on
+  `http://localhost:5173/app/`, proxying `/api` to FastAPI on port 8000, so
+  start `python server.py` first).
+- `npm run build` type-checks then writes `frontend/dist`, which
+  `dashboard/api.py` serves at `http://localhost:8000/app/` (gitignored;
+  rebuild after changing the source — the server needs no restart).
+- `npm test` (Vitest + Testing Library, API mocked with a stubbed `fetch`),
+  `npm run lint`, `npm run typecheck`.
+- After changing `dashboard/api.py` models: `python dashboard/export_openapi.py`
+  then `npm run gen:api` (in that order), and commit both generated files
+  (`openapi.json`, `src/api/schema.d.ts`). The compiler then flags every place
+  the front end no longer matches the backend.
 
 ## Data pipeline (run in this order)
 
