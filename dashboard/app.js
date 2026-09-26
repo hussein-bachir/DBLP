@@ -293,31 +293,192 @@
   }
 
   // ---------- co-authorship network ----------
+  function foldName(s) {
+    return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  }
+
   function renderNetwork(payload) {
-    // Size and label thresholds are relative to the data (not fixed paper
-    // counts) so the graph stays readable whatever year range was aggregated.
-    var papers = payload.nodes.map(function (n) { return n.papers; }).sort(function (a, b) { return b - a; });
-    var maxPapers = papers[0];
-    var labelThreshold = papers[Math.min(14, papers.length - 1)];
-    var nodes = payload.nodes.map(function (n) {
-      return {
-        id: n.id,
-        name: n.id,
-        symbolSize: 8 + 30 * Math.sqrt(n.papers / maxPapers),
-        value: n.papers,
-        category: n.group,
-        itemStyle: { color: CATEGORICAL[n.group % CATEGORICAL.length] },
-      };
-    });
-    var edges = payload.edges.map(function (e) {
-      return { source: e.source, target: e.target, value: e.weight, lineStyle: { width: 0.5 + Math.min(e.weight, 20) * 0.08, opacity: 0.35 } };
+    // Node size scales with the data (not fixed paper counts) so the graph
+    // stays readable whatever year range was aggregated.
+    var byPapers = payload.nodes.slice().sort(function (a, b) { return b.papers - a.papers; });
+    var rankOf = {};
+    byPapers.forEach(function (n, i) { rankOf[n.id] = i; });
+    var maxPapers = byPapers[0].papers;
+    var LABELED_BY_DEFAULT = 12;
+
+    var neighbors = {};
+    payload.edges.forEach(function (e) {
+      (neighbors[e.source] = neighbors[e.source] || {})[e.target] = e.weight;
+      (neighbors[e.target] = neighbors[e.target] || {})[e.source] = e.weight;
     });
 
-    makeChart("chart-network", {
+    var els = {
+      search: $("net-search"), list: $("net-authors"), clear: $("net-clear"),
+      topN: $("net-topn"), topNOut: $("net-topn-out"),
+      minW: $("net-minw"), minWOut: $("net-minw-out"),
+      status: $("net-status"),
+    };
+    els.topN.max = byPapers.length;
+    els.topN.value = Math.min(100, byPapers.length);
+    byPapers.forEach(function (n) {
+      var opt = document.createElement("option");
+      opt.value = n.id;
+      els.list.appendChild(opt);
+    });
+
+    var selected = null;
+    var chart = null;
+    var topNBeforeSearch = null;
+
+    // Layout positions of the nodes currently drawn, so a selection change can
+    // pin them instead of letting the force simulation restart and shuffle
+    // everything while the user is trying to find someone.
+    function currentPositions() {
+      var pos = {};
+      try {
+        var data = chart.getModel().getSeriesByIndex(0).getData();
+        for (var i = 0; i < data.count(); i++) {
+          var p = data.getItemLayout(i);
+          if (p) pos[data.getName(i)] = p;
+        }
+      } catch (err) { /* fall back to a free layout */ }
+      return pos;
+    }
+
+    // Filters do the decluttering: most of the ~2,000 links are one- or
+    // two-paper collaborations, so hiding weak links (and the authors left
+    // with no link) is what separates the real research groups.
+    function buildGraph(pinned) {
+      var topN = +els.topN.value;
+      var minW = +els.minW.value;
+      var inTop = {};
+      byPapers.slice(0, topN).forEach(function (n) { inTop[n.id] = true; });
+      if (selected) inTop[selected] = true;
+
+      var links = payload.edges.filter(function (e) {
+        return e.weight >= minW && inTop[e.source] && inTop[e.target];
+      });
+      var linked = {};
+      links.forEach(function (e) { linked[e.source] = linked[e.target] = true; });
+
+      var shown = byPapers.filter(function (n) { return inTop[n.id] && (linked[n.id] || n.id === selected); });
+      var near = {};
+      if (selected) {
+        near[selected] = true;
+        links.forEach(function (e) {
+          if (e.source === selected) near[e.target] = true;
+          if (e.target === selected) near[e.source] = true;
+        });
+      }
+
+      var nodes = shown.map(function (n, i) {
+        var dim = selected && !near[n.id];
+        var isSel = n.id === selected;
+        var at = pinned && pinned[n.id];
+        return {
+          id: n.id,
+          name: n.id,
+          x: at ? at[0] : undefined,
+          y: at ? at[1] : undefined,
+          fixed: !!at,
+          symbolSize: 8 + 30 * Math.sqrt(n.papers / maxPapers),
+          value: n.papers,
+          category: n.group,
+          itemStyle: {
+            color: CATEGORICAL[n.group % CATEGORICAL.length],
+            opacity: dim ? 0.22 : 1,
+            borderColor: COLOR.text,
+            borderWidth: isSel ? 3 : 0,
+          },
+          label: { show: selected ? !!near[n.id] : i < LABELED_BY_DEFAULT, fontWeight: isSel ? 600 : 400, color: isSel ? COLOR.text : COLOR.textSecondary },
+        };
+      });
+      var edges = links.map(function (e) {
+        var touches = selected && (e.source === selected || e.target === selected);
+        return {
+          source: e.source, target: e.target, value: e.weight,
+          lineStyle: {
+            width: 0.6 + Math.min(e.weight, 20) * 0.1 + (touches ? 1 : 0),
+            opacity: selected ? (touches ? 0.85 : 0.06) : 0.4,
+            color: touches ? COLOR.gold : COLOR.textFaint,
+          },
+        };
+      });
+      return { nodes: nodes, edges: edges, totalLinks: links.length };
+    }
+
+    function describe(graph) {
+      var minW = +els.minW.value;
+      if (!selected) {
+        return "Showing " + graph.nodes.length + " of " + byPapers.length + " authors and " +
+          fmt(graph.totalLinks) + " links. Links need at least " + minW + " shared paper" +
+          (minW === 1 ? "" : "s") + "; authors with no remaining link are hidden.";
+      }
+      var n = byPapers[rankOf[selected]];
+      var all = Object.keys(neighbors[selected] || {}).length;
+      var strong = Object.keys(neighbors[selected] || {}).filter(function (k) { return neighbors[selected][k] >= minW; }).length;
+      return n.id + " — #" + (rankOf[selected] + 1) + " most prolific, " + fmt(n.papers) +
+        " papers, cluster " + (n.group + 1) + ". Co-authored with " + all + " of the other " +
+        (byPapers.length - 1) + " authors (" + strong + " at ≥" + minW + " shared papers).";
+    }
+
+    function apply(keepPositions) {
+      var graph = buildGraph(keepPositions ? currentPositions() : null);
+      els.topNOut.textContent = els.topN.value;
+      els.minWOut.textContent = els.minW.value;
+      els.clear.hidden = !selected;
+      els.status.textContent = describe(graph);
+      chart.setOption({ series: [{ data: graph.nodes, links: graph.edges }] });
+    }
+
+    function select(id) {
+      selected = id;
+      if (id) {
+        els.search.value = id;
+        // make sure the searched author isn't hidden by the "authors shown" slider
+        if (rankOf[id] >= +els.topN.value) {
+          if (topNBeforeSearch === null) topNBeforeSearch = els.topN.value;
+          els.topN.value = Math.min(byPapers.length, Math.ceil((rankOf[id] + 1) / 10) * 10);
+        }
+      } else {
+        els.search.value = "";
+        if (topNBeforeSearch !== null) {
+          els.topN.value = topNBeforeSearch;
+          topNBeforeSearch = null;
+        }
+      }
+      apply(true);
+    }
+
+    function findAuthor(query) {
+      var q = foldName(query.trim());
+      if (!q) return null;
+      var pick = function (test) {
+        for (var i = 0; i < byPapers.length; i++) { if (test(foldName(byPapers[i].id))) return byPapers[i].id; }
+        return null;
+      };
+      return pick(function (s) { return s === q; }) ||
+        pick(function (s) { return s.indexOf(q) === 0; }) ||
+        pick(function (s) { return s.indexOf(q) !== -1; });
+    }
+
+    function submitSearch() {
+      var q = els.search.value;
+      if (!q.trim()) { select(null); return; }
+      var hit = findAuthor(q);
+      if (hit) { select(hit); return; }
+      selected = null;
+      apply(true);
+      els.status.textContent = "No author matching “" + q.trim() + "” among the " + byPapers.length +
+        " most prolific authors in this network.";
+    }
+
+    chart = makeChart("chart-network", {
       tooltip: tooltipCommon({
         formatter: function (p) {
-          if (p.dataType === "edge") return p.data.source + " ↔ " + p.data.target + ": " + p.data.value + " shared papers";
-          return p.data.name + ": " + p.data.value + " papers";
+          var enc = echarts.format.encodeHTML;
+          if (p.dataType === "edge") return enc(p.data.source) + " ↔ " + enc(p.data.target) + ": " + p.data.value + " shared papers";
+          return enc(p.data.name) + ": " + fmt(p.data.value) + " papers";
         },
       }),
       series: [{
@@ -325,21 +486,36 @@
         layout: "force",
         roam: true,
         draggable: true,
-        force: { repulsion: 120, edgeLength: [30, 100], gravity: 0.15 },
+        force: { repulsion: 150, edgeLength: [30, 110], gravity: 0.2 },
+        emphasis: { focus: "adjacency", label: { show: true } },
         label: {
-          show: true,
+          show: false,
           position: "right",
           color: COLOR.textSecondary,
           fontFamily: "IBM Plex Mono",
           fontSize: 10,
-          formatter: function (p) { return p.data.value >= labelThreshold ? p.data.name : ""; },
         },
         edgeSymbol: ["none", "none"],
         lineStyle: { color: COLOR.textFaint, curveness: 0.1 },
-        data: nodes,
-        links: edges,
+        data: [],
+        links: [],
       }],
     });
+
+    els.search.addEventListener("input", function () {
+      // picking a suggestion from the datalist fills the exact name: select it immediately
+      var exact = byPapers.filter(function (n) { return n.id === els.search.value; })[0];
+      if (exact) select(exact.id);
+    });
+    els.search.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); submitSearch(); }
+      if (ev.key === "Escape") { select(null); }
+    });
+    els.clear.addEventListener("click", function () { select(null); els.search.focus(); });
+    els.topN.addEventListener("input", function () { topNBeforeSearch = null; apply(); });
+    els.minW.addEventListener("input", function () { apply(); });
+
+    apply();
   }
 
   // ---------- boot ----------

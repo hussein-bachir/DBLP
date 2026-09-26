@@ -98,6 +98,17 @@ data/`venv/`/log files gitignored -- see `.gitignore`.
   Remote Sensing journal has zero 2025 records in DBLP itself (indexing gap,
   not a real drop); the "transformer" title keyword also matches electrical
   transformers, which is the ~1% bump before 2017.
+- **Co-authorship network controls**: an author search box (accent- and
+  case-insensitive, substring match, covers all 150 network authors -- not
+  the 4.1M in the dataset) plus two sliders, "min. shared papers per link"
+  (default 5) and "authors shown" (default top 100). Half of the 2,185 links
+  are one- or two-paper collaborations, which is what made the graph a
+  hairball; at the defaults it shows 83 authors / 197 links and the research
+  groups separate cleanly. Authors with no link at the current threshold are
+  hidden. Searching pins existing node positions (`fixed` + `x`/`y` read back
+  from the chart) so the highlight doesn't reshuffle the layout, widens the
+  "authors shown" slider if the match is hidden, and restores it on clear.
+  Slider changes do re-run the layout.
 - Design system: deep ink-navy background (#12172B), brass-gold accent
   (#C9A227), verdigris secondary accent (#5B8A82); Source Serif 4 for
   headlines, IBM Plex Sans/Mono for body/data -- deliberately avoiding
