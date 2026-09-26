@@ -4,10 +4,10 @@ import { Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PAGE_SIZE } from '../api/hooks';
-import { LocationDisplay, callsTo, jsonResponse, makePapers, makeProfile, renderWithProviders, stubApi } from '../test/utils';
+import { LocationDisplay, callsTo, jsonResponse, makePapers, makeProfile, realChartData, renderWithProviders, stubApi } from '../test/utils';
 import AuthorPage from './AuthorPage';
 
-// jsdom has no canvas; the charts' data is covered by chartOptions.test.ts
+// jsdom has no canvas; the charts' data is covered by lib/charts/profile.test.ts
 vi.mock('../components/EChart', () => ({
   EChart: ({ ariaLabel }: { ariaLabel: string }) => <div role="img" aria-label={ariaLabel} />,
 }));
@@ -40,7 +40,39 @@ describe('AuthorPage', () => {
     expect(screen.getByText(/this is .0002./)).toBeInTheDocument();
     expect(screen.getByText(/2026 is still being indexed/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open on DBLP' })).toHaveAttribute('href', 'https://dblp.org/search?q=Hussein%20Hazimeh');
-    expect(document.title).toBe('Hussein Hazimeh · DBLP researcher lookup');
+    expect(document.title).toBe('Hussein Hazimeh · A Field in Motion');
+  });
+
+  describe('the network shortcut', () => {
+    const NETWORK_FILE = `${import.meta.env.BASE_URL}data/coauthor_network.json`;
+
+    it('offers "Highlight in network" for an author who is in the 150-author network', async () => {
+      stubApi({
+        '/api/author': () => jsonResponse(makeProfile({ name: 'Dacheng Tao' })),
+        [NETWORK_FILE]: () => jsonResponse(realChartData('coauthor_network.json')),
+      });
+      renderAuthor(1);
+      const link = await screen.findByRole('link', { name: 'Highlight in network' });
+      expect(link).toHaveAttribute('href', '/?highlight=Dacheng%20Tao#network');
+    });
+
+    it('does not offer it for an author outside the network', async () => {
+      stubApi({
+        '/api/author': () => jsonResponse(makeProfile()), // Hussein Hazimeh 0002
+        [NETWORK_FILE]: () => jsonResponse(realChartData('coauthor_network.json')),
+      });
+      renderAuthor(1041880);
+      await screen.findByRole('heading', { level: 1 });
+      await vi.waitFor(() => expect(screen.getByRole('link', { name: 'Open on DBLP' })).toBeInTheDocument());
+      expect(screen.queryByRole('link', { name: 'Highlight in network' })).not.toBeInTheDocument();
+    });
+
+    it('still shows the profile when the network data is missing', async () => {
+      stubApi({ '/api/author': () => jsonResponse(makeProfile({ name: 'Dacheng Tao' })) }); // network file 404s
+      renderAuthor(1);
+      expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Dacheng Tao');
+      expect(screen.queryByRole('link', { name: 'Highlight in network' })).not.toBeInTheDocument();
+    });
   });
 
   it('moves keyboard focus to the new profile heading', async () => {

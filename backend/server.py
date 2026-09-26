@@ -1,10 +1,11 @@
-"""Start the dashboard: static files plus the FastAPI author-search API.
+"""Start the app: the built React front end plus the FastAPI backend.
 
     python server.py [port]          (default port 8000)
 
 The app itself is in api.py (interactive API docs at /docs). This launcher just
 runs it with uvicorn on 127.0.0.1, so the index is not reachable from other
-machines. The charts work without the author index; search needs the index from
+machines. The front end is served from frontend/dist (run `npm run build` in
+frontend/ first). The charts need no index; researcher search needs the one from
 build_author_index.py.
 """
 import sys
@@ -24,7 +25,7 @@ def main():
         info = ai.status(conn)
         conn.close()
         print(f"Author index ready: {info['authors']:,} authors, {info['papers']:,} papers")
-    print(f"Dashboard: http://localhost:{port}/index.html   API docs: http://localhost:{port}/docs   (Ctrl+C to stop)")
+    print(f"App: http://localhost:{port}/   API docs: http://localhost:{port}/docs   (Ctrl+C to stop)")
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
 
 

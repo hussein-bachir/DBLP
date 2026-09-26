@@ -25,8 +25,8 @@ from author_index import repair_text
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(HERE, "..", "data", "processed", "dblp_full.csv")
-# still the legacy dashboard's data folder; the React app takes over in the next step
-OUT_DIR = os.path.join(HERE, "..", "dashboard", "data")
+# the React app serves these as static files (Vite copies public/ into the build)
+OUT_DIR = os.path.join(HERE, "..", "frontend", "public", "data")
 # Upper bound trims the still-being-indexed tail (2026 partial, 2027 "to
 # appear"), see CONTEXT.md. Lower bound is just "everything".
 YEAR_MIN, YEAR_MAX = 1900, 2025

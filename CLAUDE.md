@@ -7,10 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Master's course assignment: extract publication records from the full DBLP XML
 dump, analyze them, and present the findings as an interactive dashboard plus a
 researcher lookup. The stack is a Python data pipeline, a FastAPI backend and a
-React front end (the old vanilla-JS dashboard in `dashboard/` is being retired).
-`CONTEXT.md` in the repo root is the canonical, continuously updated project log
-(goals, solved bugs, current task, in-progress status); read it before making
-changes and keep it current as you work.
+React + TypeScript front end. `CONTEXT.md` in the repo root is the canonical,
+continuously updated project log (goals, solved bugs, current task,
+in-progress status); read it before making changes and keep it current as you
+work.
 
 ## Environment
 
@@ -41,38 +41,46 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
   `data/processed/` — parser output and derived files (`dblp_full.csv`,
   `authors.sqlite`, …). The big ones are gitignored and regenerable.
 - `backend/` — everything that prepares or serves data for the app:
-  `api.py` (the FastAPI app: typed `/api/*` endpoints, OpenAPI docs at `/docs`),
-  `server.py` (launcher: `python server.py [port]` runs it under uvicorn on
-  127.0.0.1), `author_index.py` (stdlib-only query layer that `api.py` wraps;
-  keep HTTP concerns out of it), `build_author_index.py` (builds
+  `api.py` (the FastAPI app: typed `/api/*` endpoints, OpenAPI docs at `/docs`,
+  and it serves the built React app from `/`), `server.py` (launcher:
+  `python server.py [port]` runs it under uvicorn on 127.0.0.1),
+  `author_index.py` (stdlib-only query layer that `api.py` wraps; keep HTTP
+  concerns out of it), `build_author_index.py` (builds
   `data/processed/authors.sqlite`, ~2.4 GB, ~6 min), `build_chart_data.py`
   (aggregates the CSV into the small JSON files the charts read) and
   `export_openapi.py` (writes the schema the front end generates types from).
-- `frontend/` — the React + Vite + TypeScript app. `src/api/schema.d.ts` is
-  GENERATED from FastAPI's OpenAPI schema and is committed, so building doesn't
-  need Python. TanStack Query does the data fetching, React Router the routes,
-  ECharts is wrapped in a small component.
-- `dashboard/` — the LEGACY vanilla-JS dashboard (`index.html`, `app.js`,
-  `author-search.js`, `style.css`, `data/*.json`), still served at `/` until the
-  React app replaces it; the React app is served at `/app/`.
+- `frontend/` — the React + Vite + TypeScript app: a dashboard of 11 charts plus
+  the co-authorship network at `/`, and researcher profiles at `/author/:id`.
+  `public/data/*.json` are the chart data files (written by
+  `backend/build_chart_data.py`, committed). `src/api/schema.d.ts` is GENERATED
+  from FastAPI's OpenAPI schema and committed, so building doesn't need Python.
+  `src/data/schemas.ts` holds a zod schema per JSON file (types + runtime
+  validation). TanStack Query does the data fetching, React Router the routes,
+  ECharts is wrapped in one small component (`src/components/EChart.tsx`), and
+  all chart/network decisions are pure functions in `src/lib/` with tests.
 - `analysis/` — the original exploratory matplotlib/seaborn scripts. They read
   `data/processed/dblp_after_2018.csv` and write PNGs to `analysis/charts/`
   (gitignored). Superseded by the dashboard, kept as part of the coursework.
 
 ## Frontend commands (run in `frontend/`)
 
-- `npm install` once; `npm run dev` for development (Vite on
-  `http://localhost:5173/app/`, proxying `/api` to FastAPI on port 8000, so
-  start `python server.py` first).
+- `npm install` once. `npm run dev` for development: Vite on
+  `http://localhost:5173/`, proxying `/api` to FastAPI on port 8000, so start
+  `python server.py` first.
 - `npm run build` type-checks then writes `frontend/dist`, which
-  `backend/api.py` serves at `http://localhost:8000/app/` (gitignored; rebuild
-  after changing the source — the server needs no restart).
-- `npm test` (Vitest + Testing Library, API mocked with a stubbed `fetch`),
+  `backend/api.py` serves at `http://localhost:8000/` (gitignored; rebuild after
+  changing the source — the server needs no restart).
+- `npm test` (Vitest + Testing Library; the API and the chart data files are
+  served from a stubbed `fetch`, the latter from the real committed JSON),
   `npm run lint`, `npm run typecheck`.
 - After changing `backend/api.py` models: `python backend/export_openapi.py`
   then `npm run gen:api` (in that order), and commit both generated files
   (`openapi.json`, `src/api/schema.d.ts`). The compiler then flags every place
   the front end no longer matches the backend.
+- After changing what `backend/build_chart_data.py` writes: update
+  `src/data/schemas.ts` to match. `schemas.test.ts` validates every committed
+  file against its schema and fails if a file is missing, extra, or the wrong
+  shape.
 
 ## Data pipeline (run in this order)
 
@@ -82,17 +90,18 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
    unlimited, memory-safe parser and is the one to use for anything feeding the
    final analysis. Multi-hundred-MB output; takes real wall-clock time to run.
 2. `backend/build_chart_data.py` — streams the full `dblp_full.csv` (all years
-   up to 2025, in chunks, two passes) into small JSON files (currently written
-   to `dashboard/data/`), since the raw CSV is far too large to load
+   up to 2025, in chunks, two passes, ~6 min) into the small JSON files in
+   `frontend/public/data/`, since the raw CSV is far too large to load
    client-side. It reads `dblp_full.csv` directly.
 3. `backend/build_author_index.py` — one pass over `dblp_full.csv` into the
    SQLite author index (papers, authors, authorship, a trigram full-text index
    over accent-folded names, and a word list for typo matching). Rebuild it
    whenever `dblp_full.csv` changes. `AUTHOR_INDEX_PATH` overrides its location.
 4. `python server.py [port]` from `backend/` (default 8000, localhost only)
-   serves the API and the front ends. The `/api/*` JSON contract (field names,
-   `{"error": ...}` bodies, 503 + `"ready": false` when the index is missing) is
-   what both front ends depend on; change models and front end together.
+   serves the API and the built front end. The `/api/*` JSON contract (field
+   names, `{"error": ...}` bodies, 503 + `"ready": false` when the index is
+   missing) is what the front end depends on; change models and front end
+   together.
 5. Optional coursework analysis: `analysis/filter_after_2018.py` writes
    `data/processed/dblp_after_2018.csv`, which the other `analysis/` scripts
    read. Its `INPUT_CSV` defaults to `dblp_sample.csv` (the biased 5M-record
@@ -126,22 +135,24 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
 - The most recent 1–2 years in any time series are artificially low due to
   DBLP indexing lag, not a real publication decline — the chart data is cut off
   at 2025 (`backend/build_chart_data.py` `YEAR_MAX`); preserve that when adding
-  charts. Ratio/average charts open at 1970 because earlier years are too sparse
-  for stable shares.
+  charts. Ratio/average charts open at 1970 (`ZOOM_START_YEAR`) because earlier
+  years are too sparse for stable shares.
 - On Windows, avoid multi-line `python -c "..."` one-liners (cmd doesn't
   handle them) — write a throwaway `.py` script instead.
 - **Non-ASCII text in `dblp_full.csv` is garbled** (UTF-8 bytes decoded as
   Latin-1: `MÃ©rouane`). `parse_dblp.py` opens the dump as `iso-8859-1`, but
   the dump is UTF-8. Every non-ASCII author name is affected (~240k authors).
   `author_index.repair_text()` reverses it losslessly and is applied in
-  `build_author_index.py` and `build_chart_data.py`; any new consumer of the CSV
-  that shows or matches names must do the same (or the parser be fixed and the
-  dump re-parsed).
+  `build_author_index.py` and `build_chart_data.py` — repair BEFORE stripping
+  whitespace (a trailing "à" is "Ã" plus a non-breaking space); any new consumer
+  of the CSV that shows or matches names must do the same (or the parser be
+  fixed and the dump re-parsed).
 - DBLP separates people who share a name with a trailing 4-digit number
   ("Hussein Hazimeh 0001" / "0002" are different people). Keep the suffix in
   stored names; strip it only for matching (`author_index.fold`).
-- **A pinned CDN library version can 404 silently.** The legacy
-  `dashboard/index.html` loads ECharts from cdnjs pinned to an exact version —
-  if charts stop rendering, check the browser network tab / CDN response status
-  before assuming the app code broke; a bad pin fails as a blocked opaque
-  response, not an obvious 404 in the page.
+- The network graph holds node positions still while an author is highlighted by
+  reading them back from the ECharts series model (`readPositions` in
+  `src/lib/network.ts`). That is an internal ECharts API; if a chart upgrade
+  breaks it the function returns an empty map and the layout just re-settles
+  (the tests use a fake chart, so they won't catch a real regression — check the
+  graph in a browser after upgrading ECharts).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { venuesOption, yearsOption } from './chartOptions';
+import { venuesOption, yearsOption } from './profile';
 
 type Series = Array<{ data: number[] }>;
 type Axis = { data: Array<number | string> };

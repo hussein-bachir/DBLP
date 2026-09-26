@@ -23,6 +23,26 @@ export function stubApi(handlers: Record<string, Handler>) {
   return fetchMock;
 }
 
+// The real files backend/build_chart_data.py wrote, so dashboard tests run on real data.
+const realChartFiles = import.meta.glob('../../public/data/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+
+export function realChartData(file: string): unknown {
+  return realChartFiles[`../../public/data/${file}`];
+}
+
+/** Serve public/data/*.json from the real files; `overrides` (keyed by file name) replace individual responses. */
+export function stubChartData(overrides: Record<string, () => Response | Promise<Response>> = {}) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const name = new URL(String(input), 'http://localhost').pathname.split('/').pop() ?? '';
+    const override = overrides[name];
+    if (override) return override();
+    const data = realChartData(name);
+    return data === undefined ? jsonResponse({ error: 'not found' }, 404) : jsonResponse(data);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 export function callsTo(fetchMock: ReturnType<typeof stubApi>, path: string): URL[] {
   return fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://localhost')).filter((url) => url.pathname === path);
 }

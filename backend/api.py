@@ -1,4 +1,4 @@
-"""FastAPI app: the author-search API plus the dashboard's static files.
+"""FastAPI app: the researcher-search API and the built React app.
 
 Run it with `python server.py [port]` (or `uvicorn api:app` from this folder).
 Interactive API docs are generated at /docs.
@@ -12,11 +12,10 @@ only adds HTTP, validation and typed response models. Endpoints:
     GET /api/papers?id=<author id>&offset=<n>&limit=<n>
 
 Errors are JSON of the form {"error": "..."} (503 also carries "ready": false
-when the index has not been built), which is what author-search.js expects.
+when the index has not been built), which is what the front end expects.
 Set AUTHOR_INDEX_PATH to point at a different index file.
 """
 import os
-import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,7 +23,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -32,19 +31,8 @@ import author_index as ai
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-# the old vanilla-JS dashboard, still served at / until the React app replaces it
-LEGACY_DASHBOARD = ROOT / "dashboard"
 INDEX_PATH = os.environ.get("AUTHOR_INDEX_PATH", ai.DB_PATH)
 NOT_BUILT = "Author index not built yet. Run: python build_author_index.py"
-
-# only these are served as static files (not the .py sources next to them)
-WEB_FILES = {
-    "index.html": "text/html; charset=utf-8",
-    "style.css": "text/css; charset=utf-8",
-    "app.js": "text/javascript; charset=utf-8",
-    "author-search.js": "text/javascript; charset=utf-8",
-}
-DATA_FILE = re.compile(r"[A-Za-z0-9_\-]+\.json")
 
 
 # ------------------------------------------------------------------ models
@@ -203,32 +191,12 @@ def papers(author_id: int = Query(ge=1, alias="id"),
         return {"papers": ai.papers_page(conn, author_id, offset, limit)}
 
 
-# ------------------------------------------------------------ static files
-
-def _static(path: Path, media_type: str) -> FileResponse:
-    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "no-cache"})
-
-
-@app.get("/", include_in_schema=False)
-def home():
-    return _static(LEGACY_DASHBOARD / "index.html", WEB_FILES["index.html"])
-
-
-@app.get("/data/{name}", include_in_schema=False)
-def data_file(name: str):
-    path = LEGACY_DASHBOARD / "data" / name
-    if not DATA_FILE.fullmatch(name) or not path.is_file():
-        raise HTTPException(404, "not found")
-    return _static(path, "application/json")
-
-
 # ------------------------------------------------- the React app (frontend/)
-# `npm run build` in frontend/ writes frontend/dist; it is served under /app/
-# (vite's `base`). In development, run `npm run dev` instead: Vite serves the app
-# and proxies /api here.
+# `npm run build` in frontend/ writes frontend/dist, which is served from /. In
+# development run `npm run dev` instead: Vite serves the app and proxies /api here.
+# This catch-all is registered last, so /api/*, /docs and /openapi.json win.
 
 FRONTEND_DIST = ROOT / "frontend" / "dist"
-FRONTEND_NOT_BUILT = "React app not built yet. In frontend/ run: npm install && npm run build"
 APP_MEDIA_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -237,18 +205,21 @@ APP_MEDIA_TYPES = {
     ".map": "application/json",
     ".svg": "image/svg+xml",
 }
+NOT_BUILT_PAGE = """<!doctype html><meta charset="utf-8"><title>Frontend not built</title>
+<body style="font-family:system-ui;max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.5">
+<h1>The web app hasn&rsquo;t been built yet</h1>
+<p>The API is running, but there is no <code>frontend/dist</code> to serve. In the <code>frontend</code> folder run:</p>
+<pre>npm install
+npm run build</pre>
+<p>then reload this page. For development use <code>npm run dev</code> and open <code>http://localhost:5173/</code>.
+The API docs are at <a href="/docs">/docs</a>.</p></body>"""
 
 
-@app.get("/app", include_in_schema=False)
-def react_app_redirect():
-    return RedirectResponse("/app/")
-
-
-@app.get("/app/{path:path}", include_in_schema=False)
+@app.get("/{path:path}", include_in_schema=False)
 def react_app(path: str):
+    if path == "api" or path.startswith("api/"):
+        raise HTTPException(404, "unknown endpoint")  # a wrong API address is an error, not the app
     index = FRONTEND_DIST / "index.html"
-    if not index.is_file():
-        raise HTTPException(404, FRONTEND_NOT_BUILT)
     if path:
         target = (FRONTEND_DIST / path).resolve()
         if target.is_file() and FRONTEND_DIST.resolve() in target.parents:
@@ -257,12 +228,7 @@ def react_app(path: str):
             return FileResponse(target, media_type=APP_MEDIA_TYPES.get(target.suffix), headers={"Cache-Control": cache})
         if Path(path).suffix:  # a file that isn't there: don't answer with the app's HTML
             raise HTTPException(404, "not found")
-    # anything else is a client-side route (e.g. /app/author/123): the app handles it
-    return _static(index, APP_MEDIA_TYPES[".html"])
-
-
-@app.get("/{name}", include_in_schema=False)
-def web_file(name: str):
-    if name not in WEB_FILES:
-        raise HTTPException(404, "not found")
-    return _static(LEGACY_DASHBOARD / name, WEB_FILES[name])
+    if not index.is_file():
+        return HTMLResponse(NOT_BUILT_PAGE, status_code=503)
+    # anything else is a client-side route (e.g. /author/123): the app handles it
+    return FileResponse(index, media_type=APP_MEDIA_TYPES[".html"], headers={"Cache-Control": "no-cache"})

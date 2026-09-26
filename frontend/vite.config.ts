@@ -1,11 +1,11 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
-// The built app is served by FastAPI under /app/ (see backend/api.py), so the
-// same base is used in dev: open http://localhost:5173/app/. In dev, /api is
-// proxied to the FastAPI server, which keeps everything same-origin (no CORS).
+// The built app is served by FastAPI from / (see backend/api.py). In development,
+// Vite serves it at http://localhost:5173/ and proxies /api to the FastAPI server,
+// which keeps everything same-origin (no CORS).
 export default defineConfig({
-  base: '/app/',
+  base: '/',
   plugins: [react()],
   server: {
     port: 5173,
@@ -14,6 +14,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // ECharts is one deliberate ~630 KB chunk (215 KB gzipped), loaded only by the pages that draw charts
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks: { echarts: ['echarts/core', 'echarts/charts', 'echarts/components', 'echarts/renderers'] },

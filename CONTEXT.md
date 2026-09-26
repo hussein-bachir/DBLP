@@ -8,7 +8,8 @@ JS dashboard (not Streamlit) for a master's course assignment.
 ## Files in this project
 Layout as of the repository cleanup (data flows `pipeline/` -> `data/` ->
 `backend/` -> `frontend/`; older entries in this log use the previous names
-`scripts/`, `debug/` and `dashboard/preprocess.py`, mapped below):
+`scripts/`, `debug/`, `dashboard/preprocess.py` and the vanilla `dashboard/`
+front end, which has been deleted; mapped below):
 - `data/raw/dblp.xml.gz`, `data/raw/dblp.dtd` -- raw source data
   (downloaded from dblp.org), gitignored
 - `data/processed/*.csv`, `authors.sqlite` -- parser output and derived files
@@ -19,9 +20,8 @@ Layout as of the repository cleanup (data flows `pipeline/` -> `data/` ->
 - `backend/` -- `api.py` (FastAPI), `server.py`, `author_index.py`,
   `build_author_index.py`, `build_chart_data.py` (was
   `dashboard/preprocess.py`), `export_openapi.py`
-- `frontend/` -- the React + Vite + TypeScript app
-- `dashboard/` -- the legacy vanilla-JS dashboard (index.html, app.js,
-  author-search.js, style.css, data/*.json), being retired
+- `frontend/` -- the React + Vite + TypeScript app (dashboard, network,
+  researcher profiles); `public/data/*.json` are the chart data files
 - `analysis/` (was `scripts/`) -- the original exploratory matplotlib scripts
   (`visualize_dblp*.py`, `analyze_*.py`, `filter_after_2018.py`), charts saved
   to `analysis/charts/` (gitignored)
@@ -68,7 +68,8 @@ with the large data/`venv/`/log files gitignored -- see `.gitignore`.
    always write a small `.py` script file instead of inline `-c` for
    anything beyond a one-liner.
 
-5. **Pinned CDN library version can 404 and fail silently-ish**: `index.html`
+5. **Pinned CDN library version can 404 and fail silently-ish** (historical:
+   the vanilla dashboard is gone and ECharts is now an npm dependency): `index.html`
    originally pinned `echarts@5.5.1` from cdnjs, but cdnjs has no
    `echarts.min.js` build under that version -- the `<script>` tag got a 404
    HTML response, the browser blocked it as an opaque response
@@ -102,108 +103,102 @@ with the large data/`venv/`/log files gitignored -- see `.gitignore`.
    Related, unfixed: `elem.findtext('title')` keeps only the text before the
    first inline tag, so titles containing `<i>`/`<sub>` markup are cut short.
 
-## Current task: the JS dashboard
-- `backend/build_chart_data.py` (formerly `dashboard/preprocess.py`) streams `data/processed/dblp_full.csv` (chunked,
-  two passes, ~6 min) into small JSON files (under `dashboard/data/`) since
-  the raw CSV (8.4M rows) is too large to load client-side.
-- **All-years version (branch `all-years`)**: covers every record 1936-2025
-  (8,051,300 records; 372,476 dated 2026+ or with no valid year are left
-  out because DBLP is still indexing them). `master` still has the earlier
-  2019-2025-from-the-sample dashboard. Ratio/average charts open at 1970 with
-  a year slider reaching back to 1936, because the early decades have
-  too few records for stable shares. Findings worth knowing: `journals/corr`
-  (the arXiv mirror) is ~10% of all records and dominates top venues; the
-  Remote Sensing journal has zero 2025 records in DBLP itself (indexing gap,
-  not a real drop); the "transformer" title keyword also matches electrical
-  transformers, which is the ~1% bump before 2017.
-- **Co-authorship network controls**: an author search box (accent- and
-  case-insensitive, substring match, covers all 150 network authors -- not
-  the 4.1M in the dataset) plus two sliders, "min. shared papers per link"
-  (default 5) and "authors shown" (default top 100). Half of the 2,185 links
-  are one- or two-paper collaborations, which is what made the graph a
-  hairball; at the defaults it shows 83 authors / 197 links and the research
-  groups separate cleanly. Authors with no link at the current threshold are
-  hidden. Searching pins existing node positions (`fixed` + `x`/`y` read back
-  from the chart) so the highlight doesn't reshuffle the layout, widens the
-  "authors shown" slider if the match is hidden, and restores it on clear.
-  Slider changes do re-run the layout.
-- **Author lookup (search box at the top of the page)**: finds any of the
-  4.26M authors, not just the network's 150. Type a name (any word order, any
-  fragment of 3+ letters, accents optional); results show paper count, years
-  and top venues so people who share a name can be told apart -- e.g. DBLP has
-  two different "Hussein Hazimeh" (0001: 37 papers, ML/optimization venues;
-  0002: 25 papers, different venues and co-authors). If nothing matches
-  exactly, close spellings are tried ("hussein kenaan" finds "Hussein
-  Kanaan"). Picking a result opens a profile: papers per year, venues,
-  co-authors (click to jump to them), and the full publication list linked to
-  dblp.org. DBLP has no affiliation data, so the profile says so and the user
-  confirms identity from venues/co-authors. Needs `python server.py` and the
-  SQLite index (`build_author_index.py`, ~6 min, 2.4 GB, gitignored); on a
-  plain static server the box explains what to run and the charts still work.
-  `#author=<id>` in the URL deep-links to a profile (ids change if the index
-  is rebuilt from a different CSV).
-- **Backend migration, step 1 of 3 (branch `fastapi-backend`)**: the stdlib
-  `http.server` backend was replaced by FastAPI (`backend/api.py`), with the
-  same `/api/*` contract so the vanilla front end is unchanged. Verified by
-  running old and new servers side by side: 35 of 35 success responses
-  (15 searches, 15 profiles, 3 paging calls, status) were identical JSON.
-  Deliberate differences: bad input returns 422 (was 400), `id=0` is a 422
-  (was a 404), a `q` over 500 chars is rejected (was truncated to 100), only
-  the four web assets and `data/*.json` are served (the old server also served
-  the `.py` sources), and `/docs` + `/openapi.json` now exist. Plan: step 2 is
-  React + Vite + TypeScript for search/profile (TanStack Query for calls,
-  Vite dev proxy to this API, so CORS isn't needed), step 3 moves the charts.
-  Note: a running `server.py` keeps the code it started with; restart it to
-  pick up backend changes.
-- **Frontend migration, step 2 of 3 (branch `react-frontend`)**: `frontend/`
-  holds a React 19 + Vite 6 + TypeScript app for search and profiles (same
-  features as the vanilla search, served at `/app/`). TanStack Query handles
-  fetching (cancels superseded keystroke requests, caches profiles), React
-  Router the `/author/:id` URLs (real history/back/forward instead of
-  `#author=`), and API types are generated from the backend's OpenAPI schema.
-  40 unit/component tests; verified end to end in a browser (typing, keyboard
-  navigation, profile, back/forward without reload, paging, deep links,
-  unknown/malformed ids, missing index, a 390px mobile viewport, and Vite dev
-  mode with the proxy). "Highlight in network" is not in the React version
-  because the network still lives in the vanilla page (step 3).
-  Bugs the new tests/browser run found: (1) pressing Enter right after typing
-  opened a result from the PREVIOUS query, because the old list stays on screen
-  while the next loads -- Enter now only picks from results for exactly what is
-  typed, and otherwise queues "open the top match" until fresh results arrive
-  (same guard added to the vanilla page); (2) the status text said "2 matchs"
-  (naive pluralisation; also fixed in the vanilla page).
-- Design system: deep ink-navy background (#12172B), brass-gold accent
-  (#C9A227), verdigris secondary accent (#5B8A82); Source Serif 4 for
-  headlines, IBM Plex Sans/Mono for body/data -- deliberately avoiding
-  generic "SaaS dashboard" cliches per the frontend-design guidance.
-- Charting library: ECharts (CDN, no build step) -- chosen for its
-  built-in heatmap and force-directed graph support (used for the
-  co-authorship network).
-- Must be served via a local web server (`python -m http.server`) --
-  opening `index.html` directly will fail on the JSON fetches due to
-  CORS restrictions on the `file://` protocol.
-- Status: built, run, and verified rendering correctly (headless-browser
-  screenshot check, zero console errors, zero failed requests). The first
-  version ran `preprocess.py` against `dblp_after_2018.csv` (1,733,499
-  records, the biased sample -- see bug #6); the all-years branch re-ran it
-  against the full parse. Either way it produces the 13 JSON files under
-  `dashboard/data/`, served with `python -m http.server`. Real bugs found
-  only by actually rendering the page (not visible from reading the code):
-  - the pinned `echarts@5.5.1` CDN URL 404'd (see bug #5 above) --
-    bumped to `echarts@6.1.0`.
-  - the "Top Venues" bar chart's value-axis tick labels overlapped
-    into unreadable text in the narrower card width -- added a `k`
-    -abbreviation formatter (`5k`, `10k`, ...); also fixed a latent
-    `Object.assign` merge-order bug in the same helper that was
-    silently discarding a custom `axisLabel.fontSize`.
-  - the type-distribution donut's outside pie labels ("Conference
-    paper") were clipped at the canvas edge in the narrow card --
-    switched to inside `{d}%` labels, relying on the legend for names.
-  All 12 charts (publications/year, article-vs-conference donut, top
-  authors, top venues, co-author-count distribution, avg team size over
-  time, author productivity, distinct venues/year, top title words,
-  topic-prevalence trends, venue-comparison trends, co-authorship force
-  graph) render with real data. Next step, if any: writeup/polish only.
+## Current state: the web app (React + FastAPI)
+
+`python backend/server.py` serves the built React app at `/` (the dashboard of
+11 charts plus the co-authorship network, and researcher profiles at
+`/author/:id`) and the read-only `/api/*` search API (docs at `/docs`).
+The vanilla-JS dashboard that preceded it has been deleted.
+
+- **Chart data**: `backend/build_chart_data.py` streams
+  `data/processed/dblp_full.csv` (chunked, two passes, ~6 min) into 13 small JSON
+  files in `frontend/public/data/` (the raw CSV, 8.4M rows, is far too large to
+  load client-side). The front end validates each file with a zod schema
+  (`src/data/schemas.ts`) when it loads, and `schemas.test.ts` checks the
+  committed files against those schemas, so a change to the builder that the
+  charts don't understand fails a test instead of drawing a blank chart. A
+  missing or malformed file shows an error in just that card, with the command
+  to regenerate it.
+- **Coverage**: every record 1936-2025 (8,051,300 records; 372,476 dated 2026+
+  or with no valid year are left out because DBLP is still indexing them).
+  Ratio/average charts open at 1970 with a year slider reaching back to 1936,
+  because the early decades have too few records for stable shares. Findings
+  worth knowing: `journals/corr` (the arXiv mirror) is ~10% of all records and
+  dominates top venues; the Remote Sensing journal has zero 2025 records in DBLP
+  itself (indexing gap, not a real drop); the "transformer" title keyword also
+  matches electrical transformers, which is the ~1% bump before 2017.
+- **Co-authorship network** (`NetworkCard.tsx`, logic in `src/lib/network.ts`):
+  the 150 most prolific authors, an author search box (accent- and
+  case-insensitive, covers only these 150, not the 4.1M), and two sliders, "min.
+  shared papers per link" (default 5) and "authors shown" (default top 100).
+  Half of the 2,185 links are one- or two-paper collaborations, which is what
+  made the graph a hairball; at the defaults it shows ~83 authors / ~197 links and
+  the research groups separate cleanly. Authors with no link at the current
+  threshold are hidden. Highlighting pins existing node positions (`fixed` +
+  `x`/`y` read back from the chart) so the layout doesn't reshuffle, widens the
+  "authors shown" slider if the match is hidden, and restores it on clear; slider
+  changes re-run the layout. A profile of an author who is in the network has a
+  "Highlight in network" link (`/?highlight=<name>#network`).
+- **Researcher lookup** (search box in the header of every page): finds any of
+  the 4.26M authors. Type a name (any word order, any fragment of 3+ letters,
+  accents optional); results show paper count, years and top venues so people
+  who share a name can be told apart -- e.g. DBLP has two different "Hussein
+  Hazimeh" (0001: 37 papers, ML/optimization venues; 0002: 25 papers, different
+  venues and co-authors). If nothing matches exactly, close spellings are tried
+  ("hussein kenaan" finds "Hussein Kanaan"). Picking a result opens a profile:
+  papers per year, venues, co-authors (click to jump to them), and the full
+  publication list linked to dblp.org. DBLP has no affiliation data, so the
+  profile says so and the user confirms identity from venues/co-authors. Needs
+  the SQLite index (`build_author_index.py`, ~6 min, 2.4 GB, gitignored); without
+  it the box explains what to build and the charts still work. Author ids change
+  if the index is rebuilt from a different CSV, so `/author/<id>` links are not
+  permanent.
+- **Design system**: deep ink-navy background (#12172B), brass-gold accent
+  (#C9A227), verdigris secondary accent (#5B8A82); Source Serif 4 for headlines,
+  IBM Plex Sans/Mono for body/data -- deliberately avoiding generic "SaaS
+  dashboard" cliches. Charts use ECharts (an npm dependency, tree-shaken to the
+  chart types used and code-split into its own chunk).
+- **Tests**: 147 frontend tests (Vitest + Testing Library). Pure logic (chart
+  option builders, the network's filtering/highlighting/search/slider rules) is
+  tested directly; components are tested with the real committed JSON through a
+  stubbed `fetch`. The network tests were mutation-checked (breaking the
+  threshold comparison, the slider rounding and the dimming each fail tests).
+
+### How it got here (each step was verified before the next)
+
+- **All-years**: the first dashboard was built from `dblp_after_2018.csv`,
+  which derives from the biased 5M-record sample (bug #6), so it covered ~1.73M
+  of 3.45M papers for 2019-2025 and showed 24% journal articles versus the true
+  ~52%. `build_chart_data.py` now reads the full parse.
+- **Step 1 -- FastAPI backend**: the stdlib `http.server` backend was replaced by
+  FastAPI (`backend/api.py`) with the same `/api/*` contract. Verified by running
+  old and new servers side by side: 35 of 35 success responses (searches,
+  profiles, paging, status) were identical JSON. Deliberate differences: bad
+  input returns 422 (was 400), `id=0` is a 422 (was a 404), a `q` over 500 chars
+  is rejected (was truncated to 100), only web assets are served (the old server
+  also served the `.py` sources), and `/docs` + `/openapi.json` exist. A running
+  `server.py` keeps the code it started with; restart it to pick up changes.
+- **Step 2 -- React search and profiles**: React 19 + Vite 6 + TypeScript with
+  TanStack Query (cancels superseded keystroke requests, caches profiles),
+  React Router (real back/forward), and API types generated from the backend's
+  OpenAPI schema. Bugs the tests/browser run found: (1) pressing Enter right
+  after typing opened a result from the PREVIOUS query, because the old list
+  stays on screen while the next loads -- Enter now only picks from results for
+  exactly what is typed, and otherwise queues "open the top match" until fresh
+  results arrive; (2) the status text said "2 matchs" (naive pluralisation).
+- **Repository cleanup**: `dashboard/` mixed the backend with the old front end;
+  it was split into `backend/`, `pipeline/`, `analysis/` and `frontend/` (see
+  "Files in this project").
+- **Step 3 -- charts and network into React**: the 11 chart cards and the
+  network were ported from the vanilla `app.js` as pure functions plus thin
+  components, the vanilla dashboard was deleted, the app moved from `/app/` to
+  `/`, and `build_chart_data.py` now writes to `frontend/public/data/`. Bugs
+  found while rendering the old vanilla version, whose fixes are carried over:
+  the "Top Venues" value-axis tick labels overlapped in a narrow card (fixed with
+  a `k`-abbreviation formatter, `abbrevNumber`); the donut's outside labels were
+  clipped at the canvas edge (now whole-number shares drawn inside the ring); and
+  a pinned `echarts@5.5.1` CDN URL had 404'd (bug #5 -- irrelevant now that
+  ECharts is bundled from npm).
 
 ## Report/methodology notes worth keeping in the final writeup
 - The article/inproceedings ratio, top-authors, and top-venues findings

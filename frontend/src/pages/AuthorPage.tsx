@@ -5,8 +5,7 @@ import { ApiError, describeError } from '../api/client';
 import { useAuthor } from '../api/hooks';
 import { AuthorProfile } from '../components/AuthorProfile';
 import { splitName } from '../lib/format';
-
-const SITE = 'DBLP researcher lookup';
+import { SITE_TITLE } from '../lib/site';
 
 export default function AuthorPage() {
   const { id: raw } = useParams();
@@ -15,9 +14,9 @@ export default function AuthorPage() {
   const name = author.data?.name;
 
   useEffect(() => {
-    document.title = name ? `${splitName(name).base} · ${SITE}` : SITE;
+    document.title = name ? `${splitName(name).base} · ${SITE_TITLE}` : SITE_TITLE;
     return () => {
-      document.title = SITE;
+      document.title = SITE_TITLE;
     };
   }, [name]);
 

@@ -1,6 +1,7 @@
 import { Link, Outlet, ScrollRestoration } from 'react-router-dom';
 
 import { SearchBox } from './components/SearchBox';
+import { SITE_TITLE } from './lib/site';
 
 export default function App() {
   return (
@@ -8,7 +9,7 @@ export default function App() {
       <header className="masthead">
         <p className="eyebrow">DBLP {'·'} computer science publication record</p>
         <p className="site-title">
-          <Link to="/">Researcher lookup</Link>
+          <Link to="/">{SITE_TITLE}</Link>
         </p>
         <SearchBox />
       </header>
@@ -16,7 +17,8 @@ export default function App() {
         <Outlet />
       </main>
       <footer>
-        Data: the DBLP dump, indexed locally. Part of the dashboard {'—'} <a href="/">charts</a>.
+        Built with ECharts. Data: the DBLP dump, parsed and aggregated offline (backend/build_chart_data.py); researcher search
+        runs on a local SQLite index.
       </footer>
       <ScrollRestoration />
     </>

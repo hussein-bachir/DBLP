@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 import type { Profile } from '../api/types';
-import { venuesOption, yearsOption } from '../lib/chartOptions';
+import { useChartData } from '../data/hooks';
+import { venuesOption, yearsOption } from '../lib/charts/profile';
 import { dblpSearchUrl, fmt, plural, splitName, yearSpan } from '../lib/format';
 import { EChart } from './EChart';
 import { NameWithTag } from './NameWithTag';
@@ -24,6 +25,9 @@ export function AuthorProfile({ profile }: { profile: Profile }) {
   const years = useMemo(() => yearsOption(profile.per_year), [profile.per_year]);
   const venues = useMemo(() => venuesOption(profile.venues), [profile.venues]);
   const { base } = splitName(profile.name);
+  // the network only holds the 150 most prolific authors; offer the shortcut to those who are in it
+  const network = useChartData('network');
+  const inNetwork = useMemo(() => network.data?.nodes.some((node) => node.id === profile.name) ?? false, [network.data, profile.name]);
 
   // a new profile is a new "page": move focus to its heading so screen readers announce it
   useEffect(() => {
@@ -52,6 +56,9 @@ export function AuthorProfile({ profile }: { profile: Profile }) {
           </p>
         </div>
         <div className="profile-actions">
+          {inNetwork && (
+            <Link to={{ pathname: '/', search: `?highlight=${encodeURIComponent(profile.name)}`, hash: '#network' }}>Highlight in network</Link>
+          )}
           <a href={dblpSearchUrl(base)} target="_blank" rel="noopener noreferrer">
             Open on DBLP
           </a>

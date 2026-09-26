@@ -52,9 +52,9 @@ export function describeError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.kind) {
       case 'unavailable':
-        return 'Author search needs the dashboard server. In the dashboard folder run python server.py (the API must be reachable at /api).';
+        return 'Researcher search needs the backend server. In the backend folder run python server.py (the API must be reachable at /api).';
       case 'noindex':
-        return "The author index hasn't been built yet. In the dashboard folder run python build_author_index.py (a few minutes), then restart server.py.";
+        return "The author index hasn't been built yet. In the backend folder run python build_author_index.py (a few minutes), then restart server.py.";
       case 'notfound':
         return 'No researcher with that id.';
       default:

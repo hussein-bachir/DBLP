@@ -4,14 +4,14 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
 import App from './App';
-import HomePage from './pages/HomePage';
+import NotFoundPage from './pages/NotFoundPage';
 import './styles.css';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 });
 
-// The app lives under /app/ (vite `base`), so the router must strip that prefix.
+// `basename` follows vite's `base`, so the app still routes correctly if it is ever served from a sub-path.
 const router = createBrowserRouter(
   [
     {
@@ -19,17 +19,20 @@ const router = createBrowserRouter(
       element: <App />,
       HydrateFallback: () => <p className="profile-note">Loading{'…'}</p>,
       children: [
-        { index: true, element: <HomePage /> },
         {
-          // the profile page pulls in ECharts, so it is loaded only when first visited
+          // both pages pull in ECharts, so they load as their own chunks
+          index: true,
+          lazy: async () => ({ Component: (await import('./pages/DashboardPage')).default }),
+        },
+        {
           path: 'author/:id',
           lazy: async () => ({ Component: (await import('./pages/AuthorPage')).default }),
         },
-        { path: '*', element: <HomePage /> },
+        { path: '*', element: <NotFoundPage /> },
       ],
     },
   ],
-  { basename: import.meta.env.BASE_URL.replace(/\/$/, '') },
+  { basename: import.meta.env.BASE_URL },
 );
 
 const root = document.getElementById('root');
