@@ -29,22 +29,6 @@ MAX_QUERY_CHARS = 100
 MAX_QUERY_TOKENS = 5
 
 
-def repair_text(s):
-    """Undo UTF-8-read-as-Latin-1 damage ("MÃ©rouane" -> "Mérouane").
-
-    data/processed/dblp_full.csv was written by a parser that decoded the
-    UTF-8 dump as ISO-8859-1, so every non-ASCII character in it is garbled.
-    Re-encoding as Latin-1 and decoding as UTF-8 recovers the original; strings
-    that aren't garbled fail that round trip and are returned unchanged.
-    """
-    if not s or s.isascii():
-        return s
-    try:
-        return s.encode("latin-1").decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return s
-
-
 def fold(name):
     name = _SUFFIX.sub("", name)
     decomposed = unicodedata.normalize("NFKD", name.translate(_EXTRA_LETTERS))

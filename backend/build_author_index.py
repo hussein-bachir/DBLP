@@ -22,7 +22,7 @@ from collections import Counter
 
 import pandas as pd
 
-from author_index import DB_PATH, HERE, fold, repair_text
+from author_index import DB_PATH, HERE, fold
 
 CSV_PATH = os.path.join(HERE, "..", "data", "processed", "dblp_full.csv")
 CHUNK_ROWS = 300_000
@@ -64,12 +64,10 @@ def main(csv_path=CSV_PATH, db_path=DB_PATH):
                 y = int(year)
             except ValueError:
                 y = None
-            papers.append((paper_id, key, repair_text(title), y, 1 if kind == 'inproceedings' else 0))
+            papers.append((paper_id, key, title, y, 1 if kind == 'inproceedings' else 0))
             seen = set()
             for raw in authors.split(';'):
-                # repair BEFORE stripping: a trailing "à" is garbled as "Ã" + a
-                # non-breaking space, which str.strip() would remove first
-                name = repair_text(raw).strip()
+                name = raw.strip()
                 if not name or name in seen:
                     continue
                 seen.add(name)

@@ -18,6 +18,9 @@ def load_entity_map(dtd_path):
 
 ENTITY_MAP = load_entity_map(dtd_file_path)
 ENTITY_PATTERN = re.compile(r'&(\w+);')
+# See pipeline/parse_dblp.py: the declared ISO-8859-1 must be rewritten, or
+# libxml2 re-reads lxml's UTF-8 input as Latin-1 and garbles non-ASCII text.
+XML_DECL_ENCODING = re.compile(r'encoding="[^"]*"')
 
 
 def substitute_entities(line):
@@ -40,7 +43,9 @@ def parse_dblp_to_csv(source_file, output_csv, limit=10000):
     parser = etree.XMLPullParser(events=('end',), recover=True)
 
     with gzip.open(source_file, 'rt', encoding='iso-8859-1') as f:
-        for line in f:
+        for line_no, line in enumerate(f):
+            if line_no == 0:
+                line = XML_DECL_ENCODING.sub('encoding="UTF-8"', line)
             parser.feed(substitute_entities(line))
 
             for event, elem in parser.read_events():
@@ -56,7 +61,9 @@ def parse_dblp_to_csv(source_file, output_csv, limit=10000):
 
                 if elem.tag in ('article', 'inproceedings'):
                     key = elem.get('key')
-                    title = elem.findtext('title')
+                    title_elem = elem.find('title')
+                    title = (''.join(title_elem.itertext())
+                             if title_elem is not None else None)
                     year = elem.findtext('year')
                     authors = "; ".join(
                         a.text for a in elem.findall('author') if a.text

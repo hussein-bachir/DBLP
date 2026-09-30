@@ -20,6 +20,12 @@ def load_entity_map(dtd_path):
 ENTITY_MAP = load_entity_map(dtd_file_path)
 ENTITY_PATTERN = re.compile(r'&(\w+);')
 
+# The dump declares encoding="ISO-8859-1", but lxml hands each str to libxml2
+# as UTF-8. libxml2 obeys the declaration and re-reads those UTF-8 bytes as
+# Latin-1, which garbles every non-ASCII character ("MÃ©rouane"). Rewriting
+# the declaration makes it match what the parser is actually given.
+XML_DECL_ENCODING = re.compile(r'encoding="[^"]*"')
+
 
 def substitute_entities(line):
     return ENTITY_PATTERN.sub(
@@ -50,6 +56,8 @@ def parse_dblp_to_csv(source_file, output_csv):
     try:
         for line in f:
             lines_read += 1
+            if lines_read == 1:
+                line = XML_DECL_ENCODING.sub('encoding="UTF-8"', line)
             parser.feed(substitute_entities(line))
 
             for event, elem in parser.read_events():
@@ -61,7 +69,11 @@ def parse_dblp_to_csv(source_file, output_csv):
 
                 if elem.tag in ('article', 'inproceedings'):
                     key = elem.get('key')
-                    title = elem.findtext('title')
+                    # itertext, not findtext: titles can hold inline markup
+                    # (<i>, <sub>, <sup>) and findtext stops at the first tag
+                    title_elem = elem.find('title')
+                    title = (''.join(title_elem.itertext())
+                             if title_elem is not None else None)
                     year = elem.findtext('year')
                     authors = "; ".join(
                         a.text for a in elem.findall('author') if a.text

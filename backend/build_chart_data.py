@@ -21,8 +21,6 @@ from itertools import combinations
 import networkx as nx
 import pandas as pd
 
-from author_index import repair_text
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(HERE, "..", "data", "processed", "dblp_full.csv")
 # the React app serves these as static files (Vite copies public/ into the build)
@@ -67,9 +65,7 @@ def save(name, obj):
 
 
 def split_authors(s):
-    # dblp_full.csv has UTF-8 names decoded as Latin-1 ("MÃ©rouane"); repair
-    # them BEFORE stripping (a trailing "à" is "Ã" + a non-breaking space)
-    return [name for name in (repair_text(a).strip() for a in s.split(';')) if name]
+    return [name for name in (a.strip() for a in s.split(';')) if name]
 
 
 def read_chunks(usecols, stats=None):

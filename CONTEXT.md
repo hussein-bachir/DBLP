@@ -89,19 +89,31 @@ with the large data/`venv/`/log files gitignored -- see `.gitignore`.
    `analysis/` charts still need `INPUT_CSV` pointed at `dblp_full.csv` and
    `filter_after_2018.py` re-run before their numbers are usable.
 
-7. **Accented names in `dblp_full.csv` are mojibake.** `parse_dblp.py` (and
-   `parse_dblp_200k.py`, `pipeline/debug/`) decode the dump as `iso-8859-1`, but it is
-   UTF-8, so `Mérouane Debbah` is stored as `MÃ©rouane Debbah`. All 241,638
-   non-ASCII author names (5.7% of 4.26M authors) are affected, and none are
-   clean. Found while building author search: a search for `cudré` could not
-   match `CudrÃ©-Mauroux`. Fixed downstream, not at the source:
-   `backend/author_index.repair_text()` re-encodes as Latin-1 and decodes as
-   UTF-8 (lossless; strings that aren't garbled are left alone), and both
-   `build_author_index.py` and `build_chart_data.py` apply it. The parsers and the
-   `analysis/` charts are unchanged, so those still show garbled names. The
-   proper fix is `encoding='utf-8'` in the parsers plus a re-parse (not done).
-   Related, unfixed: `elem.findtext('title')` keeps only the text before the
-   first inline tag, so titles containing `<i>`/`<sub>` markup are cut short.
+7. **Accented names came out of the parser as mojibake** (`Mérouane Debbah`
+   stored as `MÃ©rouane Debbah`; all 241,638 non-ASCII author names, 5.7% of
+   4.26M authors). Found while building author search: a search for `cudré`
+   could not match `CudrÃ©-Mauroux`. First worked around downstream with a
+   `repair_text()` step in the two builders, on the assumption that the dump
+   was UTF-8 being decoded as `iso-8859-1`. That diagnosis was wrong: the dump
+   is plain ASCII (non-ASCII characters are DTD entities such as `&eacute;`)
+   and opening it as `utf-8` changes nothing. The real cause is the dump's XML
+   declaration, `encoding="ISO-8859-1"`: lxml hands each `str` to libxml2 as
+   UTF-8, libxml2 obeys the declaration and re-reads those bytes as Latin-1.
+   Fixed at the source (2026-09-30): `parse_dblp.py` and `parse_dblp_200k.py`
+   rewrite the declaration to `encoding="UTF-8"` on the first line, the dump
+   was re-parsed, and `repair_text()` was removed. Checked against the old CSV:
+   same 8,423,776 rows and keys in the same order, every author field equal to
+   the old one after repair, and no name left that the old repair would alter.
+   `dblp_sample.csv` and `dblp_after_2018.csv` were NOT regenerated, so the
+   `analysis/` charts still show garbled names.
+
+8. **`elem.findtext('title')` cut titles at the first inline tag.** Titles hold
+   inline markup (`<i>`, `<sub>`, `<sup>`), and `findtext` returns only the
+   text before the first child element, so `Observer-based H∞ control
+   of networked systems...` was stored as `Observer-based H`. Fixed in the same re-parse
+   with `''.join(title_elem.itertext())`: 70,227 titles changed, 5,959 of which
+   had been stored empty because the title started with a tag. No title is
+   empty now.
 
 ## Current state: the web app (React + FastAPI)
 

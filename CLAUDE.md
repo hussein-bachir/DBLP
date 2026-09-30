@@ -139,14 +139,18 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   years are too sparse for stable shares.
 - On Windows, avoid multi-line `python -c "..."` one-liners (cmd doesn't
   handle them) — write a throwaway `.py` script instead.
-- **Non-ASCII text in `dblp_full.csv` is garbled** (UTF-8 bytes decoded as
-  Latin-1: `MÃ©rouane`). `parse_dblp.py` opens the dump as `iso-8859-1`, but
-  the dump is UTF-8. Every non-ASCII author name is affected (~240k authors).
-  `author_index.repair_text()` reverses it losslessly and is applied in
-  `build_author_index.py` and `build_chart_data.py` — repair BEFORE stripping
-  whitespace (a trailing "à" is "Ã" plus a non-breaking space); any new consumer
-  of the CSV that shows or matches names must do the same (or the parser be
-  fixed and the dump re-parsed).
+- **The dump's XML declaration must be rewritten before it reaches the
+  parser.** The dump is plain ASCII (non-ASCII characters are DTD entities) and
+  declares `encoding="ISO-8859-1"`. lxml hands each `str` to libxml2 as UTF-8,
+  libxml2 obeys the declaration and re-reads those bytes as Latin-1, and every
+  non-ASCII character comes out garbled (`MÃ©rouane`). `parse_dblp.py` rewrites
+  the declaration to `encoding="UTF-8"` on the first line. Changing the encoding
+  the file is opened with does NOT fix it. `dblp_full.csv` is clean UTF-8, so
+  consumers need no repair step; `dblp_sample.csv` and `dblp_after_2018.csv`
+  predate the fix and are still garbled until regenerated.
+- **Read titles with `''.join(title.itertext())`, not `findtext('title')`.**
+  Titles hold inline markup (`<i>`, `<sub>`, `<sup>`) and `findtext` returns
+  only the text before the first tag.
 - DBLP separates people who share a name with a trailing 4-digit number
   ("Hussein Hazimeh 0001" / "0002" are different people). Keep the suffix in
   stored names; strip it only for matching (`author_index.fold`).
