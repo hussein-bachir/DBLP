@@ -4,17 +4,32 @@ import type { ReactElement } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
-import type { Paper, Profile, SearchResponse } from '../api/types';
+import type { AskStatus, Paper, Profile, SearchResponse } from '../api/types';
 
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
+
+/** A text/event-stream response carrying `events` as `data:` lines, one network chunk each. */
+export function eventStream(events: unknown[], { keepOpen = false } = {}): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}
+
+`));
+      if (!keepOpen) controller.close();
+    },
+  });
+  return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
 }
 
 type Handler = (url: URL) => Response | Promise<Response>;
 
 /** Replace fetch with a table of handlers keyed by URL path, e.g. '/api/search'. */
 export function stubApi(handlers: Record<string, Handler>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  // typed with `init` so tests can read back what was sent (method, body, signal)
+  const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (input) => {
     const url = new URL(String(input), 'http://localhost');
     const handler = handlers[url.pathname];
     return handler ? handler(url) : jsonResponse({ error: 'not found' }, 404);
@@ -123,3 +138,16 @@ export function makeProfile(overrides: Partial<Profile> = {}): Profile {
     ...overrides,
   };
 }
+
+export const ASK_STATUS: AskStatus = {
+  keyword_search: true,
+  semantic_search: false,
+  semantic_papers: 0,
+  semantic_min_year: null,
+  semantic_error: null,
+  providers: [
+    { id: 'groq', label: 'Groq', default_model: 'llama-3.3-70b-versatile', models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] },
+    { id: 'ollama', label: 'Ollama (local)', default_model: 'qwen2.5:7b', models: ['qwen2.5:7b'] },
+  ],
+  default_provider: 'groq',
+};

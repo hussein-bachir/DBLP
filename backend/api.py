@@ -10,24 +10,33 @@ only adds HTTP, validation and typed response models. Endpoints:
     GET /api/search?q=<name>
     GET /api/author?id=<author id>
     GET /api/papers?id=<author id>&offset=<n>&limit=<n>
+    GET /api/ask/status
+    POST /api/ask           {"question", "provider"?, "model"?} -> server-sent events
 
 Errors are JSON of the form {"error": "..."} (503 also carries "ready": false
 when the index has not been built), which is what the front end expects.
 Set AUTHOR_INDEX_PATH to point at a different index file.
 """
+import json
 import os
+import queue
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal, Union
 
+import anyio
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field, RootModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import author_index as ai
+import llm
+import rag_agent
+import title_search as ts
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -96,6 +105,82 @@ class Status(BaseModel):
     ready: bool
     authors: int
     papers: int
+
+
+# --- Ask (questions answered by a language model over the index; see rag_agent.py)
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    provider: str | None = Field(None, max_length=40, description="a provider id from /api/ask/status")
+    model: str | None = Field(None, max_length=120, description="any model name the provider accepts")
+
+
+class LLMProvider(BaseModel):
+    id: str
+    label: str
+    default_model: str
+    models: list[str]
+
+
+class AskStatus(BaseModel):
+    keyword_search: bool            # papers_fts exists (build_title_index.py)
+    semantic_search: bool           # the title vectors are usable (build_title_vectors.py)
+    semantic_papers: int            # how many papers have a vector
+    semantic_min_year: int | None   # the vectors cover papers from this year on (None: all years)
+    semantic_error: str | None
+    providers: list[LLMProvider]    # usable now; empty if no key is set and Ollama isn't running
+    default_provider: str | None
+
+
+class AuthorRef(BaseModel):
+    id: int
+    name: str
+
+
+class SourcePaper(BaseModel):
+    ref: str                        # "P3", as cited in the answer text
+    id: int
+    key: str
+    title: str | None
+    year: int | None
+    venue: str
+    type: Literal["article", "inproceedings"]
+    authors: list[AuthorRef]        # at most 6, not in byline order
+    n_authors: int
+
+
+class AskStatusEvent(BaseModel):
+    type: Literal["status"]
+    text: str
+
+
+class AskTokenEvent(BaseModel):
+    type: Literal["token"]
+    text: str
+
+
+class AskRetractEvent(BaseModel):
+    type: Literal["retract"]        # drop the answer text streamed so far (it was preamble to a tool call)
+
+
+class AskDoneEvent(BaseModel):
+    type: Literal["done"]
+    sources: list[SourcePaper]      # the papers the answer cites, in order of first citation
+    authors: list[AuthorRef]        # researchers the answer names that the tools looked up
+    provider: str | None
+    model: str
+    tool_calls: int
+
+
+class AskErrorEvent(BaseModel):
+    type: Literal["error"]
+    message: str
+
+
+class AskEvent(RootModel):
+    """One server-sent event of POST /api/ask (each `data:` line is one of these, as JSON)."""
+    root: Annotated[Union[AskStatusEvent, AskTokenEvent, AskRetractEvent, AskDoneEvent, AskErrorEvent],
+                    Field(discriminator="type")]
 
 
 # --------------------------------------------------------------------- app
@@ -189,6 +274,84 @@ def papers(author_id: int = Query(ge=1, alias="id"),
     """A page of a researcher's papers, newest first."""
     with index() as conn:
         return {"papers": ai.papers_page(conn, author_id, offset, limit)}
+
+
+NO_TITLE_INDEX = "Title index not built yet. Run: python build_title_index.py"
+KEEPALIVE_SECONDS = 15
+
+
+class EventStream(StreamingResponse):
+    media_type = "text/event-stream"   # also what OpenAPI documents for the endpoint
+
+
+@app.get("/api/ask/status", response_model=AskStatus)
+def ask_status():
+    """Which retrieval indexes exist and which language-model providers are usable now."""
+    with index() as conn:
+        vec = ts.vectors_status(conn)
+        bm25 = ts.has_bm25(conn)
+    providers = llm.available()
+    return {"keyword_search": bm25, "semantic_search": vec["available"], "semantic_papers": vec["papers"],
+            "semantic_min_year": vec["min_year"], "semantic_error": vec["error"],
+            "providers": providers, "default_provider": llm.default_provider(providers)}
+
+
+def _run_agent(question, provider, model, events, cancelled):
+    """Worker thread: owns its own connection (sqlite3 objects can't cross threads)."""
+    conn = ai.connect(INDEX_PATH)
+    try:
+        for event in rag_agent.answer(conn, question, provider, model, cancelled.is_set):
+            events.put(event)
+    except Exception as exc:  # a bug, or an unreadable index: report it in the stream
+        print(f"ask error: {exc!r}")
+        events.put({"type": "error", "message": "Something went wrong while answering. See the server log."})
+    finally:
+        conn.close()
+        events.put(None)
+
+
+@app.post("/api/ask", response_class=EventStream, responses={200: {
+    "model": AskEvent,
+    "description": "A text/event-stream: each `data:` line is one AskEvent as JSON, ending with a done or error event.",
+}})
+async def ask(body: AskRequest):
+    """Answer a question about the dataset, streamed as server-sent events.
+
+    A language model calls fixed search/count tools over the index (it never writes SQL) and
+    cites the papers it used as [P1], [P2], ...
+    """
+    with index() as conn:
+        if not ts.has_bm25(conn):
+            return JSONResponse({"ready": False, "error": NO_TITLE_INDEX}, status_code=503)
+    try:
+        llm.resolve(body.provider, body.model)
+    except llm.LLMUnavailable as exc:
+        raise HTTPException(503 if not body.provider else 422, str(exc))
+
+    events, cancelled = queue.Queue(), threading.Event()
+    threading.Thread(target=_run_agent, daemon=True, name="ask",
+                     args=(body.question, body.provider, body.model, events, cancelled)).start()
+
+    def next_event():
+        try:
+            return events.get(timeout=KEEPALIVE_SECONDS)
+        except queue.Empty:
+            return "keepalive"
+
+    async def stream():
+        try:
+            while True:
+                event = await anyio.to_thread.run_sync(next_event)
+                if event is None:
+                    return
+                if event == "keepalive":   # a comment line keeps proxies from closing a quiet stream
+                    yield ": keep-alive\n\n"
+                    continue
+                yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+        finally:   # also runs when the client disconnects: stop the worker
+            cancelled.set()
+
+    return EventStream(stream(), headers={"X-Accel-Buffering": "no"})
 
 
 # ------------------------------------------------- the React app (frontend/)

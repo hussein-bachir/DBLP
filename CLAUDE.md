@@ -22,6 +22,10 @@ work.
 - Every Python script resolves its data paths from its own location (a
   `REPO_ROOT` / `HERE` built from `__file__`), so it can be run from any working
   directory, e.g. `.\venv\Scripts\python.exe pipeline\parse_dblp.py`.
+- Ask needs a language model: copy `backend/.env.example` to `backend/.env`
+  (gitignored, never commit keys) and set a free-tier key (`GROQ_API_KEY`,
+  `MISTRAL_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`), or run Ollama
+  with a tool-calling model. No pay-as-you-go provider is used by design.
 - The Python side has no test suite, linter or build step. The React app in
   `frontend/` has all three (see "Frontend commands" below).
 - Node 20.18 is installed, which is older than what current Vite (8.x, needs
@@ -49,8 +53,20 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
   `data/processed/authors.sqlite`, ~2.4 GB, ~6 min), `build_chart_data.py`
   (aggregates the CSV into the small JSON files the charts read) and
   `export_openapi.py` (writes the schema the front end generates types from).
+  The Ask feature (questions answered by a language model, `/ask`):
+  `title_search.py` (keyword/semantic/hybrid title retrieval and topic counts,
+  no HTTP), `rag_tools.py` (the fixed tools the model may call; it never writes
+  SQL), `rag_agent.py` (the tool-calling loop, yields events that `api.py`
+  streams as SSE), `llm.py` (provider presets: Groq, Mistral, Gemini,
+  OpenRouter, Ollama, or any OpenAI-compatible URL; keys in `backend/.env`,
+  template `.env.example`), `build_title_index.py`, `build_title_vectors.py`,
+  `ask_cli.py` (same agent from the terminal) and `rag_eval.py` (retrieval
+  precision per method, answer correctness per model).
 - `frontend/` — the React + Vite + TypeScript app: a dashboard of 11 charts plus
-  the co-authorship network at `/`, and researcher profiles at `/author/:id`.
+  the co-authorship network at `/`, researcher profiles at `/author/:id`, and
+  Ask at `/ask` (`src/api/ask.ts` reads the SSE stream from `fetch`, since
+  EventSource can't POST; `src/lib/askState.ts` and `citations.ts` are its pure
+  logic).
   `public/data/*.json` are the chart data files (written by
   `backend/build_chart_data.py`, committed). `src/api/schema.d.ts` is GENERATED
   from FastAPI's OpenAPI schema and committed, so building doesn't need Python.
@@ -97,6 +113,17 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
    SQLite author index (papers, authors, authorship, a trigram full-text index
    over accent-folded names, and a word list for typo matching). Rebuild it
    whenever `dblp_full.csv` changes. `AUTHOR_INDEX_PATH` overrides its location.
+   3b. `backend/build_title_index.py` — adds `papers_fts` (FTS5 BM25 over
+   titles, porter stemming) to `authors.sqlite` in place, ~1 min. Rebuilding
+   `authors.sqlite` drops it: re-run this after every step 3.
+   3c. Optional: `backend/build_title_vectors.py [--min-year N]` — embeds titles
+   (all-MiniLM-L6-v2) into `data/processed/title_vectors/` (float16 memmap +
+   FAISS IVF-PQ, ids = `papers.id`). Uses a CUDA GPU automatically if torch sees
+   one (install the CUDA torch build on that machine), else CPU (hours for all
+   8.4M titles, so use `--min-year` there). Resumable: a killed run continues,
+   and the folder can be copied to another machine mid-run. Must be re-run after
+   step 3 (ids change); the API detects a stale index via `meta.json` and falls
+   back to keyword search. Without it Ask is keyword-only.
 4. `python server.py [port]` from `backend/` (default 8000, localhost only)
    serves the API and the built front end. The `/api/*` JSON contract (field
    names, `{"error": ...}` bodies, 503 + `"ready": false` when the index is
@@ -160,3 +187,18 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   breaks it the function returns an empty map and the layout just re-settles
   (the tests use a fake chart, so they won't catch a real regression — check the
   graph in a browser after upgrading ECharts).
+- **Ask: FTS5 tables can't be aliased in `MATCH`.** `FROM papers_fts f ... WHERE
+  f MATCH ?` fails with "no such column: f"; write `papers_fts MATCH ?` and
+  `papers_fts.rank` (see `title_search.py`).
+- **Ask: small local models write tool calls as text.** qwen2.5-coder in Ollama
+  answers `{"name": "topic_stats", "arguments": {...}}` as content instead of a
+  real tool call; `rag_agent.text_tool_calls` recognises a reply that is only
+  such call(s) and runs them, and a `retract` event clears the streamed JSON.
+- **Ask: sqlite3 connections can't cross threads.** `/api/ask` runs the agent in
+  a worker thread that opens its own connection and relays events through a
+  queue; the stream's `finally` sets a cancel flag that the agent and a SQLite
+  progress handler check, so a closed browser tab stops the work.
+- **Ask: the index has no author byline order** (`authorship` is keyed by
+  author), so a paper's authors are a set; don't present them as first/last
+  author. Citations `[P#]` the model invents are dropped (backend: not in
+  `sources`; front end: `linkCitations` removes them).

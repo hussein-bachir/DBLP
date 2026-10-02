@@ -2,6 +2,7 @@
 data/raw/dblp.xml.gz
 data/processed/*.csv
 data/processed/*.sqlite*
+data/processed/title_vectors/
 
 # matplotlib/seaborn chart output (regenerate via analysis/visualize_dblp*.py / analyze_*.py)
 analysis/charts/*.png
@@ -12,6 +13,9 @@ frontend/dist/
 
 # Python virtual environment
 venv/
+
+# Local secrets: LLM provider API keys (template: backend/.env.example)
+backend/.env
 
 # Local logs and caches
 *.log

@@ -173,10 +173,349 @@
           }
         }
       }
+    },
+    "/api/ask/status": {
+      "get": {
+        "summary": "Ask Status",
+        "description": "Which retrieval indexes exist and which language-model providers are usable now.",
+        "operationId": "ask_status_api_ask_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ask": {
+      "post": {
+        "summary": "Ask",
+        "description": "Answer a question about the dataset, streamed as server-sent events.\n\nA language model calls fixed search/count tools over the index (it never writes SQL) and\ncites the papers it used as [P1], [P2], ...",
+        "operationId": "ask_api_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "A text/event-stream: each `data:` line is one AskEvent as JSON, ending with a done or error event.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskEvent",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AskDoneEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "done",
+            "title": "Type"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourcePaper"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorRef"
+            },
+            "type": "array",
+            "title": "Authors"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "tool_calls": {
+            "type": "integer",
+            "title": "Tool Calls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "sources",
+          "authors",
+          "provider",
+          "model",
+          "tool_calls"
+        ],
+        "title": "AskDoneEvent"
+      },
+      "AskErrorEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error",
+            "title": "Type"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "message"
+        ],
+        "title": "AskErrorEvent"
+      },
+      "AskEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AskStatusEvent"
+          },
+          {
+            "$ref": "#/components/schemas/AskTokenEvent"
+          },
+          {
+            "$ref": "#/components/schemas/AskRetractEvent"
+          },
+          {
+            "$ref": "#/components/schemas/AskDoneEvent"
+          },
+          {
+            "$ref": "#/components/schemas/AskErrorEvent"
+          }
+        ],
+        "title": "AskEvent",
+        "description": "One server-sent event of POST /api/ask (each `data:` line is one of these, as JSON).",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "done": "#/components/schemas/AskDoneEvent",
+            "error": "#/components/schemas/AskErrorEvent",
+            "retract": "#/components/schemas/AskRetractEvent",
+            "status": "#/components/schemas/AskStatusEvent",
+            "token": "#/components/schemas/AskTokenEvent"
+          }
+        }
+      },
+      "AskRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "a provider id from /api/ask/status"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "any model name the provider accepts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest"
+      },
+      "AskRetractEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "retract",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "AskRetractEvent"
+      },
+      "AskStatus": {
+        "properties": {
+          "keyword_search": {
+            "type": "boolean",
+            "title": "Keyword Search"
+          },
+          "semantic_search": {
+            "type": "boolean",
+            "title": "Semantic Search"
+          },
+          "semantic_papers": {
+            "type": "integer",
+            "title": "Semantic Papers"
+          },
+          "semantic_min_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Min Year"
+          },
+          "semantic_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Error"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/LLMProvider"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "default_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keyword_search",
+          "semantic_search",
+          "semantic_papers",
+          "semantic_min_year",
+          "semantic_error",
+          "providers",
+          "default_provider"
+        ],
+        "title": "AskStatus"
+      },
+      "AskStatusEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "status",
+            "title": "Type"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "AskStatusEvent"
+      },
+      "AskTokenEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "token",
+            "title": "Type"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "AskTokenEvent"
+      },
+      "AuthorRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "AuthorRef"
+      },
       "CoAuthor": {
         "properties": {
           "id": {
@@ -212,6 +551,37 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LLMProvider": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "default_model": {
+            "type": "string",
+            "title": "Default Model"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "default_model",
+          "models"
+        ],
+        "title": "LLMProvider"
       },
       "Paper": {
         "properties": {
@@ -486,6 +856,80 @@
           "venues"
         ],
         "title": "SearchResult"
+      },
+      "SourcePaper": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "venue": {
+            "type": "string",
+            "title": "Venue"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "article",
+              "inproceedings"
+            ],
+            "title": "Type"
+          },
+          "authors": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorRef"
+            },
+            "type": "array",
+            "title": "Authors"
+          },
+          "n_authors": {
+            "type": "integer",
+            "title": "N Authors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "id",
+          "key",
+          "title",
+          "year",
+          "venue",
+          "type",
+          "authors",
+          "n_authors"
+        ],
+        "title": "SourcePaper"
       },
       "Status": {
         "properties": {

@@ -28,6 +28,10 @@ const router = createBrowserRouter(
           path: 'author/:id',
           lazy: async () => ({ Component: (await import('./pages/AuthorPage')).default }),
         },
+        {
+          path: 'ask',
+          lazy: async () => ({ Component: (await import('./pages/AskPage')).default }),
+        },
         { path: '*', element: <NotFoundPage /> },
       ],
     },

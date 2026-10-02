@@ -84,10 +84,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ask/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ask Status
+         * @description Which retrieval indexes exist and which language-model providers are usable now.
+         */
+        get: operations["ask_status_api_ask_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask
+         * @description Answer a question about the dataset, streamed as server-sent events.
+         *
+         *     A language model calls fixed search/count tools over the index (it never writes SQL) and
+         *     cites the papers it used as [P1], [P2], ...
+         */
+        post: operations["ask_api_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AskDoneEvent */
+        AskDoneEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "done";
+            /** Sources */
+            sources: components["schemas"]["SourcePaper"][];
+            /** Authors */
+            authors: components["schemas"]["AuthorRef"][];
+            /** Provider */
+            provider: string | null;
+            /** Model */
+            model: string;
+            /** Tool Calls */
+            tool_calls: number;
+        };
+        /** AskErrorEvent */
+        AskErrorEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** Message */
+            message: string;
+        };
+        /**
+         * AskEvent
+         * @description One server-sent event of POST /api/ask (each `data:` line is one of these, as JSON).
+         */
+        AskEvent: components["schemas"]["AskStatusEvent"] | components["schemas"]["AskTokenEvent"] | components["schemas"]["AskRetractEvent"] | components["schemas"]["AskDoneEvent"] | components["schemas"]["AskErrorEvent"];
+        /** AskRequest */
+        AskRequest: {
+            /** Question */
+            question: string;
+            /**
+             * Provider
+             * @description a provider id from /api/ask/status
+             */
+            provider?: string | null;
+            /**
+             * Model
+             * @description any model name the provider accepts
+             */
+            model?: string | null;
+        };
+        /** AskRetractEvent */
+        AskRetractEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "retract";
+        };
+        /** AskStatus */
+        AskStatus: {
+            /** Keyword Search */
+            keyword_search: boolean;
+            /** Semantic Search */
+            semantic_search: boolean;
+            /** Semantic Papers */
+            semantic_papers: number;
+            /** Semantic Min Year */
+            semantic_min_year: number | null;
+            /** Semantic Error */
+            semantic_error: string | null;
+            /** Providers */
+            providers: components["schemas"]["LLMProvider"][];
+            /** Default Provider */
+            default_provider: string | null;
+        };
+        /** AskStatusEvent */
+        AskStatusEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "status";
+            /** Text */
+            text: string;
+        };
+        /** AskTokenEvent */
+        AskTokenEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "token";
+            /** Text */
+            text: string;
+        };
+        /** AuthorRef */
+        AuthorRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
         /** CoAuthor */
         CoAuthor: {
             /** Id */
@@ -101,6 +244,17 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** LLMProvider */
+        LLMProvider: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Default Model */
+            default_model: string;
+            /** Models */
+            models: string[];
         };
         /** Paper */
         Paper: {
@@ -180,6 +334,30 @@ export interface components {
             last_year: number | null;
             /** Venues */
             venues: components["schemas"]["VenueCount"][];
+        };
+        /** SourcePaper */
+        SourcePaper: {
+            /** Ref */
+            ref: string;
+            /** Id */
+            id: number;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string | null;
+            /** Year */
+            year: number | null;
+            /** Venue */
+            venue: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "article" | "inproceedings";
+            /** Authors */
+            authors: components["schemas"]["AuthorRef"][];
+            /** N Authors */
+            n_authors: number;
         };
         /** Status */
         Status: {
@@ -322,6 +500,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PapersPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_status_api_ask_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskStatus"];
+                };
+            };
+        };
+    };
+    ask_api_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description A text/event-stream: each `data:` line is one AskEvent as JSON, ending with a done or error event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["AskEvent"];
                 };
             };
             /** @description Validation Error */

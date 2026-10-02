@@ -177,7 +177,7 @@ The vanilla-JS dashboard that preceded it has been deleted.
   IBM Plex Sans/Mono for body/data -- deliberately avoiding generic "SaaS
   dashboard" cliches. Charts use ECharts (an npm dependency, tree-shaken to the
   chart types used and code-split into its own chunk).
-- **Tests**: 147 frontend tests (Vitest + Testing Library). Pure logic (chart
+- **Tests**: 184 frontend tests (Vitest + Testing Library; 37 of them for Ask). Pure logic (chart
   option builders, the network's filtering/highlighting/search/slider rules) is
   tested directly; components are tested with the real committed JSON through a
   stubbed `fetch`. The network tests were mutation-checked (breaking the
@@ -218,6 +218,64 @@ The vanilla-JS dashboard that preceded it has been deleted.
   clipped at the canvas edge (now whole-number shares drawn inside the ring); and
   a pinned `echarts@5.5.1` CDN URL had 404'd (bug #5 -- irrelevant now that
   ECharts is bundled from npm).
+
+## Ask the data (RAG question answering, 2026-10-02)
+
+`/ask` answers natural-language questions about the dataset with a language
+model that calls fixed tools over `authors.sqlite`, and cites the papers it used.
+
+- **Why tools, not plain top-k retrieval**: DBLP has only title, year, venue and
+  authors (no abstracts), and many questions are aggregates ("how many...",
+  "who publishes most on...") that retrieving k titles can't answer. So the
+  model gets four tools (`backend/rag_tools.py`): `search_papers` (hybrid title
+  search), `topic_stats` (exact counts of titles containing every query word,
+  by year/venue/author/type), `find_author` and `author_profile` (reusing
+  `author_index`). It never writes SQL. At most 5 tool rounds per question.
+- **Retrieval** (`backend/title_search.py`): FTS5 BM25 over titles
+  (`build_title_index.py`, ~1 min, adds `papers_fts` to `authors.sqlite`) plus
+  optional sentence-transformer vectors in FAISS (`build_title_vectors.py`),
+  merged with reciprocal rank fusion. Without vectors it degrades to
+  keyword-only and the page says so.
+- **Providers** (`backend/llm.py`): the user won't use pay-as-you-go APIs, so
+  presets are free tiers (Groq, Mistral, Gemini, OpenRouter) plus Ollama and any
+  OpenAI-compatible URL; one OpenAI SDK client covers all. Only providers with a
+  key (or a running Ollama) are offered; the page switches per question.
+  Provider errors (rate limit, bad key, unknown model) become one-line messages.
+- **Citations**: every paper a tool returns gets a ref `P1, P2, ...`; the answer
+  cites `[P3]`, and the `done` event lists only refs that exist. Refs the model
+  invents are dropped (seen in practice: qwen2.5-coder 7B cited `[P1]`..`[P5]`
+  for venues when no paper had been returned).
+- **Verified** (Ollama, qwen2.5-coder:7b on CPU, 35-165 s per answer):
+  transformer-titles-per-year counts matched SQL exactly and carried the
+  incomplete-years note; the federated-learning-in-healthcare answer's 12
+  citations all resolved to real records; "Hussein Hazimeh" listed both DBLP
+  people. That model writes tool calls as text, which the agent now accepts
+  (see CLAUDE.md). A free hosted 70B model (Groq) is expected to be much faster
+  and better at reading results; not yet tested (no key configured).
+- **Hosted providers verified (2026-10-02)**: Groq `openai/gpt-oss-120b` (8-11 s)
+  and Mistral `ministral-14b-latest` (7 s) both returned the exact
+  transformer-per-year counts. Lessons: (1) free-tier catalogues change --
+  Groq no longer serves `llama-3.3-70b-versatile`, so `llm.py` now reads each
+  provider's live `/models` list (cached 10 min, non-chat models filtered out)
+  and falls back from a vanished default; (2) a free Mistral key gets the
+  Ministral models only -- Small/Medium/Magistral answer 429 with
+  `x-ratelimit-limit-req-minute: 0`, which is reported as "not in your plan",
+  not "wait a minute"; (3) GPT-OSS cites as `【P1】`, which both the backend and
+  `linkCitations` now accept.
+- **Vectors, in progress**: this laptop has no GPU; CPU embedding runs at
+  ~285 titles/s (all 8.4M would take ~8 h), so a `--min-year 2024` subset
+  (1,540,807 titles, ~86 min) was built. Kill-and-resume was verified (picked up
+  at 50,000 in 12 s). All embeddings are checkpointed in
+  `data/processed/title_vectors/`, but the run was stopped during FAISS training
+  because the machine ran low on memory (other apps open). Re-running
+  `python build_title_vectors.py --min-year 2024` goes straight to the index
+  step; the training sample was cut to 50 vectors per IVF list (~248k, ~380 MB)
+  to make that lighter. Until then Ask is keyword-only.
+- **Evaluation** (`backend/rag_eval.py`): retrieval precision@20 on ten
+  paraphrased topic queries, judged by a title regex per query; keyword-only
+  baseline mean 0.59, with paraphrases failing ("collaborative model training
+  without sharing patient data" 0.10, "teaching robots by trial and error"
+  0.00). `--answers` checks six aggregate questions against SQL-computed truth.
 
 ## Report/methodology notes worth keeping in the final writeup
 - The article/inproceedings ratio, top-authors, and top-venues findings

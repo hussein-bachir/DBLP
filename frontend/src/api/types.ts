@@ -11,3 +11,11 @@ export type Paper = Schemas['Paper'];
 export type PapersPage = Schemas['PapersPage'];
 export type CoAuthor = Schemas['CoAuthor'];
 export type VenueCount = Schemas['VenueCount'];
+
+export type AskStatus = Schemas['AskStatus'];
+export type AskRequest = Schemas['AskRequest'];
+export type LLMProvider = Schemas['LLMProvider'];
+export type AskEvent = Schemas['AskEvent'];
+export type AskDoneEvent = Schemas['AskDoneEvent'];
+export type SourcePaper = Schemas['SourcePaper'];
+export type AuthorRef = Schemas['AuthorRef'];

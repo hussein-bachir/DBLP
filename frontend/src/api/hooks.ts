@@ -45,3 +45,8 @@ export function useMorePapers(id: number) {
     staleTime: Infinity,
   });
 }
+
+export function useAskStatus() {
+  // which providers are usable can change (a key added, Ollama started), so don't cache it for long
+  return useQuery({ queryKey: ['ask-status'], queryFn: ({ signal }) => api.askStatus(signal), staleTime: 15_000, retry: retryTransient });
+}

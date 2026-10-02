@@ -1,4 +1,4 @@
-import type { PapersPage, Profile, SearchResponse, Status } from './types';
+import type { AskStatus, PapersPage, Profile, SearchResponse, Status } from './types';
 
 export type ApiErrorKind =
   | 'unavailable' // nothing answering with JSON: the server isn't running (or a proxy failed)
@@ -41,6 +41,7 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
 
 export const api = {
   status: (signal?: AbortSignal) => request<Status>('/api/status', signal),
+  askStatus: (signal?: AbortSignal) => request<AskStatus>('/api/ask/status', signal),
   search: (q: string, signal?: AbortSignal) => request<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`, signal),
   author: (id: number, signal?: AbortSignal) => request<Profile>(`/api/author?id=${id}`, signal),
   papers: (id: number, offset: number, limit: number, signal?: AbortSignal) =>
