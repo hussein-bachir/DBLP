@@ -9,10 +9,10 @@ networkx==3.6.1
 # Backend API (backend/api.py, backend/server.py)
 fastapi==0.141.1
 uvicorn==0.54.0
-# Ask feature (backend/llm.py, rag_agent.py): any OpenAI-compatible provider
+# Ask feature (backend/rag/llm.py, agent.py): any OpenAI-compatible provider
 openai==3.23.0
 python-dotenv==1.2.4
-# Ask feature, semantic title search (backend/build_title_vectors.py, title_search.py).
+# Ask feature, semantic title search (backend/rag/build_title_vectors.py, title_search.py).
 # PyPI's torch wheel is CPU-only on Windows; on a machine with an NVIDIA GPU install the
 # CUDA build first, using the command https://pytorch.org/get-started/locally/ gives for your CUDA version
 torch==2.14.1

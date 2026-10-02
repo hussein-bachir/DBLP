@@ -15,7 +15,10 @@ import sqlite3
 import sys
 import time
 
-from author_index import DB_PATH
+if __name__ == "__main__":  # run as a script: import from backend/ (author_index, api, rag), not backend/rag/
+    sys.path[0] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+from author_index import DB_PATH  # noqa: E402
 
 
 def main(db_path=DB_PATH):

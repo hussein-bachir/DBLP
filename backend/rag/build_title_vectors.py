@@ -1,8 +1,8 @@
 """Build the semantic (meaning-based) search index over paper titles.
 
-    python build_title_vectors.py                   every paper (GPU: ~30 min; CPU: hours)
-    python build_title_vectors.py --min-year 2015   only papers from 2015 on (CPU-friendly)
-    python build_title_vectors.py --restart         throw away a previous partial run
+    python rag/build_title_vectors.py                   every paper (GPU: ~30 min; CPU: hours)
+    python rag/build_title_vectors.py --min-year 2015   only papers from 2015 on (CPU-friendly)
+    python rag/build_title_vectors.py --restart         throw away a previous partial run
 
 Embeds each title of data/processed/authors.sqlite with a sentence-transformer
 (default all-MiniLM-L6-v2, 384 dimensions) and writes
@@ -30,8 +30,11 @@ import time
 
 import numpy as np
 
-from author_index import DB_PATH, connect
-from title_search import VECTORS_DIR, pick_device
+if __name__ == "__main__":  # run as a script: import from backend/ (author_index, api, rag), not backend/rag/
+    sys.path[0] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+from author_index import DB_PATH, connect  # noqa: E402
+from rag.title_search import VECTORS_DIR, pick_device  # noqa: E402
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK = 50_000            # titles embedded between progress checkpoints

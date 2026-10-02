@@ -52,7 +52,7 @@ function Notices({ status }: { status: AskStatus }) {
     <>
       {!status.keyword_search && (
         <p className="ask-notice is-error">
-          The title index hasn{'’'}t been built yet. In the backend folder run <code>python build_title_index.py</code> (about a minute).
+          The title index hasn{'’'}t been built yet. In the backend folder run <code>python rag/build_title_index.py</code> (about a minute).
         </p>
       )}
       {status.providers.length === 0 && (
@@ -64,7 +64,7 @@ function Notices({ status }: { status: AskStatus }) {
       {status.keyword_search && !status.semantic_search && (
         <p className="ask-notice">
           {status.semantic_error ?? 'Keyword search only: topic questions match title words, not meaning.'} Building the title vectors (
-          <code>python build_title_vectors.py</code>) adds meaning-based search.
+          <code>python rag/build_title_vectors.py</code>) adds meaning-based search.
         </p>
       )}
       {status.semantic_search && status.semantic_min_year !== null && (

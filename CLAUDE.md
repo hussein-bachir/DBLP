@@ -53,15 +53,18 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
   `data/processed/authors.sqlite`, ~2.4 GB, ~6 min), `build_chart_data.py`
   (aggregates the CSV into the small JSON files the charts read) and
   `export_openapi.py` (writes the schema the front end generates types from).
-  The Ask feature (questions answered by a language model, `/ask`):
+- `backend/rag/` — the Ask feature (questions answered by a language model,
+  `/ask`), a package imported as `rag.<module>` with `backend/` on the path:
   `title_search.py` (keyword/semantic/hybrid title retrieval and topic counts,
-  no HTTP), `rag_tools.py` (the fixed tools the model may call; it never writes
-  SQL), `rag_agent.py` (the tool-calling loop, yields events that `api.py`
-  streams as SSE), `llm.py` (provider presets: Groq, Mistral, Gemini,
-  OpenRouter, Ollama, or any OpenAI-compatible URL; keys in `backend/.env`,
-  template `.env.example`), `build_title_index.py`, `build_title_vectors.py`,
-  `ask_cli.py` (same agent from the terminal) and `rag_eval.py` (retrieval
-  precision per method, answer correctness per model).
+  no HTTP), `tools.py` (the fixed tools the model may call; it never writes
+  SQL), `agent.py` (the tool-calling loop, yields events that `api.py` streams
+  as SSE), `llm.py` (provider presets: Groq, Mistral, Gemini, OpenRouter,
+  Ollama, or any OpenAI-compatible URL; keys in `backend/.env`, template
+  `backend/.env.example`), `build_title_index.py`, `build_title_vectors.py`,
+  `ask_cli.py` (same agent from the terminal) and `eval.py` (retrieval
+  precision per method, answer correctness per model). The four scripts run
+  from any folder (`python backend/rag/ask_cli.py`): each one, when run
+  directly, swaps `backend/rag/` for `backend/` at the front of `sys.path`.
 - `frontend/` — the React + Vite + TypeScript app: a dashboard of 11 charts plus
   the co-authorship network at `/`, researcher profiles at `/author/:id`, and
   Ask at `/ask` (`src/api/ask.ts` reads the SSE stream from `fetch`, since
@@ -113,10 +116,10 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
    SQLite author index (papers, authors, authorship, a trigram full-text index
    over accent-folded names, and a word list for typo matching). Rebuild it
    whenever `dblp_full.csv` changes. `AUTHOR_INDEX_PATH` overrides its location.
-   3b. `backend/build_title_index.py` — adds `papers_fts` (FTS5 BM25 over
+   3b. `backend/rag/build_title_index.py` — adds `papers_fts` (FTS5 BM25 over
    titles, porter stemming) to `authors.sqlite` in place, ~1 min. Rebuilding
    `authors.sqlite` drops it: re-run this after every step 3.
-   3c. Optional: `backend/build_title_vectors.py [--min-year N]` — embeds titles
+   3c. Optional: `backend/rag/build_title_vectors.py [--min-year N]` — embeds titles
    (all-MiniLM-L6-v2) into `data/processed/title_vectors/` (float16 memmap +
    FAISS IVF-PQ, ids = `papers.id`). Uses a CUDA GPU automatically if torch sees
    one (install the CUDA torch build on that machine), else CPU (hours for all
@@ -189,10 +192,10 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   graph in a browser after upgrading ECharts).
 - **Ask: FTS5 tables can't be aliased in `MATCH`.** `FROM papers_fts f ... WHERE
   f MATCH ?` fails with "no such column: f"; write `papers_fts MATCH ?` and
-  `papers_fts.rank` (see `title_search.py`).
+  `papers_fts.rank` (see `rag/title_search.py`).
 - **Ask: small local models write tool calls as text.** qwen2.5-coder in Ollama
   answers `{"name": "topic_stats", "arguments": {...}}` as content instead of a
-  real tool call; `rag_agent.text_tool_calls` recognises a reply that is only
+  real tool call; `rag.agent.text_tool_calls` recognises a reply that is only
   such call(s) and runs them, and a `retract` event clears the streamed JSON.
 - **Ask: sqlite3 connections can't cross threads.** `/api/ask` runs the agent in
   a worker thread that opens its own connection and relays events through a
@@ -204,6 +207,6 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   `sources`; front end: `linkCitations` removes them).
 - **Ask: hybrid search fuses only all-words keyword matches with the vectors.**
   Fusing any-word BM25 results (titles sharing one loose word) with semantic
-  results scored below semantic alone in `rag_eval.py` (0.62 vs 0.68). Re-run
-  `rag_eval.py` after changing `title_search.hybrid` and keep hybrid at or
+  results scored below semantic alone in `rag/eval.py` (0.62 vs 0.68). Re-run
+  `rag/eval.py` after changing `title_search.hybrid` and keep hybrid at or
   above the better single method.

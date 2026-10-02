@@ -1,7 +1,7 @@
-"""Answer a question about DBLP with a language model that calls rag_tools.
+"""Answer a question about DBLP with a language model that calls rag/tools.py.
 
 `answer()` is a generator of events, which api.py streams to the browser as
-server-sent events and ask_cli.py prints:
+server-sent events and rag/ask_cli.py prints:
 
   {"type": "status", "text": "Searching titles for ..."}   a tool is running
   {"type": "token", "text": "..."}                         a piece of the answer
@@ -16,8 +16,8 @@ import json
 import re
 from collections import Counter
 
-import llm
-import rag_tools
+from rag import llm
+from rag import tools as rag_tools
 
 MAX_ROUNDS = 5
 _SUFFIX = re.compile(r"\s+\d{4}$")

@@ -19,7 +19,9 @@ front end, which has been deleted; mapped below):
   `parse_dblp_200k.py`) -- diagnostics used to root-cause the parser bugs below
 - `backend/` -- `api.py` (FastAPI), `server.py`, `author_index.py`,
   `build_author_index.py`, `build_chart_data.py` (was
-  `dashboard/preprocess.py`), `export_openapi.py`
+  `dashboard/preprocess.py`), `export_openapi.py`; `backend/rag/` -- the Ask
+  feature (moved there from `backend/` on 2026-10-02, with `rag_agent.py`,
+  `rag_tools.py`, `rag_eval.py` renamed to `agent.py`, `tools.py`, `eval.py`)
 - `frontend/` -- the React + Vite + TypeScript app (dashboard, network,
   researcher profiles); `public/data/*.json` are the chart data files
 - `analysis/` (was `scripts/`) -- the original exploratory matplotlib scripts
@@ -227,16 +229,16 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
 - **Why tools, not plain top-k retrieval**: DBLP has only title, year, venue and
   authors (no abstracts), and many questions are aggregates ("how many...",
   "who publishes most on...") that retrieving k titles can't answer. So the
-  model gets four tools (`backend/rag_tools.py`): `search_papers` (hybrid title
+  model gets four tools (`backend/rag/tools.py`): `search_papers` (hybrid title
   search), `topic_stats` (exact counts of titles containing every query word,
   by year/venue/author/type), `find_author` and `author_profile` (reusing
   `author_index`). It never writes SQL. At most 5 tool rounds per question.
-- **Retrieval** (`backend/title_search.py`): FTS5 BM25 over titles
+- **Retrieval** (`backend/rag/title_search.py`): FTS5 BM25 over titles
   (`build_title_index.py`, ~1 min, adds `papers_fts` to `authors.sqlite`) plus
   optional sentence-transformer vectors in FAISS (`build_title_vectors.py`),
   merged with reciprocal rank fusion. Without vectors it degrades to
   keyword-only and the page says so.
-- **Providers** (`backend/llm.py`): the user won't use pay-as-you-go APIs, so
+- **Providers** (`backend/rag/llm.py`): the user won't use pay-as-you-go APIs, so
   presets are free tiers (Groq, Mistral, Gemini, OpenRouter) plus Ollama and any
   OpenAI-compatible URL; one OpenAI SDK client covers all. Only providers with a
   key (or a running Ollama) are offered; the page switches per question.
@@ -271,7 +273,7 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
   per IVF list (~248k) and the re-run went straight to the index step. Older
   papers are found by keyword search only; build the full set on the GPU
   machine (`build_title_vectors.py --restart`, no `--min-year`).
-- **Evaluation** (`backend/rag_eval.py`): retrieval precision@20 on ten
+- **Evaluation** (`backend/rag/eval.py`): retrieval precision@20 on ten
   paraphrased topic queries, judged by a title regex per query (an automatic
   proxy), over 2024+ papers: keyword 0.62, semantic 0.68, hybrid 0.68.
   Semantic search fixes paraphrases ("collaborative model training without

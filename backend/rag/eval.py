@@ -1,8 +1,8 @@
 """Evaluate the Ask feature: retrieval quality, and answer correctness per model.
 
-    python rag_eval.py                       retrieval only (no language model needed)
-    python rag_eval.py --answers             also ask the default provider the aggregate questions
-    python rag_eval.py --answers --provider groq --model llama-3.1-8b-instant
+    python rag/eval.py                       retrieval only (no language model needed)
+    python rag/eval.py --answers             also ask the default provider the aggregate questions
+    python rag/eval.py --answers --provider groq --model llama-3.1-8b-instant
 
 1. Retrieval. Each topic query is phrased the way a person would ask, often
    without the words the papers' titles use, and comes with a regular
@@ -11,7 +11,7 @@
    miss the pattern), so compare methods with it rather than reading it as an
    absolute score.
    Methods: keyword (BM25), semantic (vectors), hybrid (both, fused). Semantic
-   and hybrid need build_title_vectors.py; with --min-year, every method is
+   and hybrid need rag/build_title_vectors.py; with --min-year, every method is
    restricted to those years so the comparison stays fair.
 
 2. Answers. Questions whose correct answer is computed here straight from the
@@ -20,14 +20,17 @@
    not the retrieval.
 """
 import argparse
+import os
 import re
 import sys
 import time
 
-import author_index as ai
-import rag_agent
-import title_search as ts
-from api import INDEX_PATH, NOT_BUILT
+if __name__ == "__main__":  # run as a script: import from backend/ (author_index, api, rag), not backend/rag/
+    sys.path[0] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+import author_index as ai  # noqa: E402
+from api import INDEX_PATH, NOT_BUILT  # noqa: E402
+from rag import agent as rag_agent, title_search as ts  # noqa: E402
 
 K = 20
 
@@ -54,7 +57,7 @@ def retrieval(conn, min_year):
         methods["semantic"] = lambda q: ts.semantic(conn, q, K, **filters)
         methods["hybrid"] = lambda q: [p["id"] for p in ts.hybrid(conn, q, K, **filters)["papers"]]
     else:
-        print(f"(no usable title vectors: {vec['error'] or 'run build_title_vectors.py'}; keyword only)\n")
+        print(f"(no usable title vectors: {vec['error'] or 'run rag/build_title_vectors.py'}; keyword only)\n")
 
     scores = {m: [] for m in methods}
     print(f"precision@{K}" + (f", papers from {min_year} on" if min_year else ""))
@@ -140,7 +143,7 @@ def main():
     if conn is None:
         sys.exit(NOT_BUILT)
     if not ts.has_bm25(conn):
-        sys.exit("Title index not built yet. Run: python build_title_index.py")
+        sys.exit("Title index not built yet. Run: python rag/build_title_index.py")
     retrieval(conn, args.min_year or ts.vectors_status(conn)["min_year"])
     if args.answers:
         print()

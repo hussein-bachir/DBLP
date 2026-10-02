@@ -1,6 +1,6 @@
 """Paper retrieval for the Ask feature: keyword, semantic and hybrid search over titles.
 
-No HTTP here (api.py and rag_tools.py wrap it). DBLP has no abstracts, so a
+No HTTP here (api.py and rag/tools.py wrap it). DBLP has no abstracts, so a
 paper's title plus its year, venue and authors is all there is to retrieve.
 
   bm25      FTS5 over titles (build_title_index.py adds `papers_fts`)
@@ -134,7 +134,7 @@ class _Vectors:
             return
         if meta.get("index_built_at") != built_at:
             self.error = ("title vectors were built from a different authors.sqlite; "
-                          "re-run build_title_vectors.py")
+                          "re-run rag/build_title_vectors.py")
             print("title vectors:", self.error)
             return
         try:
@@ -185,7 +185,7 @@ def vectors_status(conn):
         return {"available": False, "papers": 0, "min_year": None, "error": None}
     if meta.get("index_built_at") != _index_built_at(conn):
         return {"available": False, "papers": 0, "min_year": None,
-                "error": "title vectors are out of date; re-run build_title_vectors.py"}
+                "error": "title vectors are out of date; re-run rag/build_title_vectors.py"}
     return {"available": _vectors.error is None, "papers": meta["papers"],
             "min_year": meta.get("min_year"), "error": _vectors.error}
 
@@ -263,7 +263,7 @@ def hybrid(conn, query, k=20, **filters):
     Keyword search votes in the fusion only with titles that contain EVERY
     query word: titles sharing one loose word ("model", "data") are noise for
     a question phrased in other words, and fusing them in pulled precision
-    below semantic search alone (rag_eval.py: 0.62 vs 0.68; with this rule
+    below semantic search alone (rag/eval.py: 0.62 vs 0.68; with this rule
     0.68). Titles matching only some words still fill the list after the fused
     ones, which is how papers without a vector (older than the vectors'
     --min-year) are found. Without vectors this is plain keyword ranking.

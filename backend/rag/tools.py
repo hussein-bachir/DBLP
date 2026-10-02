@@ -12,7 +12,7 @@ answer's sources are looked up from them afterwards.
 import time
 
 import author_index as ai
-import title_search as ts
+from rag import title_search as ts
 
 YEAR_INCOMPLETE = 2025   # DBLP is still indexing the latest years (see CLAUDE.md)
 TOOL_SECONDS = 30        # a single tool call is interrupted after this long

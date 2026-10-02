@@ -148,6 +148,6 @@ describe('AskPage', () => {
   it('tells the user to build the title index when it is missing', async () => {
     stubApi({ '/api/ask/status': () => jsonResponse({ ...ASK_STATUS, keyword_search: false }) });
     renderWithProviders(<AskPage />);
-    expect(await screen.findByText(/python build_title_index\.py/)).toBeInTheDocument();
+    expect(await screen.findByText(/python rag\/build_title_index\.py/)).toBeInTheDocument();
   });
 });

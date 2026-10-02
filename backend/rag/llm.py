@@ -25,8 +25,8 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(HERE, ".env"))
+BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BACKEND, ".env"))   # backend/.env, next to server.py
 
 
 @dataclass(frozen=True)

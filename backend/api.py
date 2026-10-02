@@ -34,9 +34,7 @@ from pydantic import BaseModel, Field, RootModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import author_index as ai
-import llm
-import rag_agent
-import title_search as ts
+from rag import agent as rag_agent, llm, title_search as ts
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -107,7 +105,7 @@ class Status(BaseModel):
     papers: int
 
 
-# --- Ask (questions answered by a language model over the index; see rag_agent.py)
+# --- Ask (questions answered by a language model over the index; see rag/agent.py)
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
@@ -123,8 +121,8 @@ class LLMProvider(BaseModel):
 
 
 class AskStatus(BaseModel):
-    keyword_search: bool            # papers_fts exists (build_title_index.py)
-    semantic_search: bool           # the title vectors are usable (build_title_vectors.py)
+    keyword_search: bool            # papers_fts exists (rag/build_title_index.py)
+    semantic_search: bool           # the title vectors are usable (rag/build_title_vectors.py)
     semantic_papers: int            # how many papers have a vector
     semantic_min_year: int | None   # the vectors cover papers from this year on (None: all years)
     semantic_error: str | None
@@ -276,7 +274,7 @@ def papers(author_id: int = Query(ge=1, alias="id"),
         return {"papers": ai.papers_page(conn, author_id, offset, limit)}
 
 
-NO_TITLE_INDEX = "Title index not built yet. Run: python build_title_index.py"
+NO_TITLE_INDEX = "Title index not built yet. Run: python rag/build_title_index.py"
 KEEPALIVE_SECONDS = 15
 
 

@@ -1,17 +1,20 @@
 """Ask DBLP a question from the command line (same agent as the /ask page).
 
-    python ask_cli.py "How many papers mention transformers each year since 2015?"
-    python ask_cli.py --provider ollama --model qwen2.5:7b "Where does Hussein Hazimeh publish?"
-    python ask_cli.py --list          (the providers usable right now)
+    python rag/ask_cli.py "How many papers mention transformers each year since 2015?"
+    python rag/ask_cli.py --provider ollama --model qwen2.5:7b "Where does Hussein Hazimeh publish?"
+    python rag/ask_cli.py --list          (the providers usable right now)
 """
 import argparse
+import os
 import sys
 import time
 
-import author_index as ai
-import llm
-import rag_agent
-from api import INDEX_PATH, NOT_BUILT
+if __name__ == "__main__":  # run as a script: import from backend/ (author_index, api, rag), not backend/rag/
+    sys.path[0] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+import author_index as ai  # noqa: E402
+from api import INDEX_PATH, NOT_BUILT  # noqa: E402
+from rag import agent as rag_agent, llm  # noqa: E402
 
 
 def main():
