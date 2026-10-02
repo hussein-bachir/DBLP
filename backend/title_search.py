@@ -88,9 +88,9 @@ def _filters(year_from=None, year_to=None, venue=None, author_id=None, alias="p"
     return where, params
 
 
-def bm25(conn, query, k=FETCH, **filters):
-    """Paper ids, best keyword match first. filters: see _filters."""
-    expr = match_expr(query, "any")
+def bm25(conn, query, k=FETCH, mode="any", **filters):
+    """Paper ids, best keyword match first. mode: see match_expr; filters: see _filters."""
+    expr = match_expr(query, mode)
     if expr is None:
         return []
     where, params = _filters(**filters)
@@ -260,19 +260,30 @@ def recent(conn, k=20, **filters):
 def hybrid(conn, query, k=20, **filters):
     """{"papers": [...], "methods": [...]}: the best k papers by keyword and meaning together.
 
+    Keyword search votes in the fusion only with titles that contain EVERY
+    query word: titles sharing one loose word ("model", "data") are noise for
+    a question phrased in other words, and fusing them in pulled precision
+    below semantic search alone (rag_eval.py: 0.62 vs 0.68; with this rule
+    0.68). Titles matching only some words still fill the list after the fused
+    ones, which is how papers without a vector (older than the vectors'
+    --min-year) are found. Without vectors this is plain keyword ranking.
     An empty query lists the newest papers matching the filters instead.
     """
     if not (query or "").strip():
         return {"papers": papers(conn, recent(conn, k, **filters)), "methods": ["filter"]}
-    methods, rankings = [], []
+    methods, any_words, all_words = [], [], []
     if has_bm25(conn):
-        rankings.append(bm25(conn, query, FETCH, **filters))
+        all_words = bm25(conn, query, FETCH, mode="all", **filters)
+        any_words = bm25(conn, query, FETCH, mode="any", **filters)
         methods.append("keyword")
     sem = semantic(conn, query, FETCH, **filters)
     if sem:
-        rankings.append(sem)
         methods.append("semantic")
-    return {"papers": papers(conn, rrf(*rankings)[:k]), "methods": methods}
+        ranked = rrf(all_words, sem) if all_words else sem
+    else:
+        ranked = all_words
+    ranked = list(dict.fromkeys([*ranked[:k], *any_words]))   # partial matches only fill up
+    return {"papers": papers(conn, ranked[:k]), "methods": methods}
 
 
 # ------------------------------------------------------------- aggregates

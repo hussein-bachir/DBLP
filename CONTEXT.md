@@ -262,20 +262,32 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
   `x-ratelimit-limit-req-minute: 0`, which is reported as "not in your plan",
   not "wait a minute"; (3) GPT-OSS cites as `【P1】`, which both the backend and
   `linkCitations` now accept.
-- **Vectors, in progress**: this laptop has no GPU; CPU embedding runs at
-  ~285 titles/s (all 8.4M would take ~8 h), so a `--min-year 2024` subset
-  (1,540,807 titles, ~86 min) was built. Kill-and-resume was verified (picked up
-  at 50,000 in 12 s). All embeddings are checkpointed in
-  `data/processed/title_vectors/`, but the run was stopped during FAISS training
-  because the machine ran low on memory (other apps open). Re-running
-  `python build_title_vectors.py --min-year 2024` goes straight to the index
-  step; the training sample was cut to 50 vectors per IVF list (~248k, ~380 MB)
-  to make that lighter. Until then Ask is keyword-only.
+- **Vectors**: this laptop has no GPU; CPU embedding runs at ~285 titles/s
+  (all 8.4M would take ~8 h), so a `--min-year 2024` subset was built:
+  1,540,807 titles, ~86 min of embedding, then FAISS IVF4965,PQ48 trained in
+  ~3 min (index 0.09 GB). Kill-and-resume verified (picked up at 50,000 in
+  12 s). The first index attempt was stopped by Claude Code for low system
+  memory during FAISS training; the training sample was then cut to 50 vectors
+  per IVF list (~248k) and the re-run went straight to the index step. Older
+  papers are found by keyword search only; build the full set on the GPU
+  machine (`build_title_vectors.py --restart`, no `--min-year`).
 - **Evaluation** (`backend/rag_eval.py`): retrieval precision@20 on ten
-  paraphrased topic queries, judged by a title regex per query; keyword-only
-  baseline mean 0.59, with paraphrases failing ("collaborative model training
-  without sharing patient data" 0.10, "teaching robots by trial and error"
-  0.00). `--answers` checks six aggregate questions against SQL-computed truth.
+  paraphrased topic queries, judged by a title regex per query (an automatic
+  proxy), over 2024+ papers: keyword 0.62, semantic 0.68, hybrid 0.68.
+  Semantic search fixes paraphrases ("collaborative model training without
+  sharing patient data" 0.15 -> 0.50, "using large language models to write
+  source code" 0.00 -> 0.60); keyword wins on literal ones ("explaining the
+  predictions of black-box models" 0.95 vs 0.75). **Fusion bug found by the
+  eval:** plain RRF of any-word BM25 with the vectors scored 0.62, below
+  semantic alone, because titles sharing one loose word ("model", "data")
+  pushed out the good semantic hits. Fix (`title_search.hybrid`): keyword
+  votes in the fusion only with titles containing every query word; any-word
+  matches just fill the list after the fused results (that is how pre-2024
+  papers, which have no vector, are still found). Variants tried on the same
+  queries: down-weighting keyword to 0.5 gave 0.65; the all-words rule was
+  kept because it has a reason beyond these ten queries, not just the best
+  score. "teaching robots by trial and error" stays at ~0 for every method.
+  `--answers` checks six aggregate questions against SQL-computed truth.
 
 ## Report/methodology notes worth keeping in the final writeup
 - The article/inproceedings ratio, top-authors, and top-venues findings

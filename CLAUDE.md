@@ -202,3 +202,8 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   author), so a paper's authors are a set; don't present them as first/last
   author. Citations `[P#]` the model invents are dropped (backend: not in
   `sources`; front end: `linkCitations` removes them).
+- **Ask: hybrid search fuses only all-words keyword matches with the vectors.**
+  Fusing any-word BM25 results (titles sharing one loose word) with semantic
+  results scored below semantic alone in `rag_eval.py` (0.62 vs 0.68). Re-run
+  `rag_eval.py` after changing `title_search.hybrid` and keep hybrid at or
+  above the better single method.
