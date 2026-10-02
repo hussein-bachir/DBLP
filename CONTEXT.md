@@ -149,7 +149,14 @@ The vanilla-JS dashboard that preceded it has been deleted.
   threshold are hidden. Highlighting pins existing node positions (`fixed` +
   `x`/`y` read back from the chart) so the layout doesn't reshuffle, widens the
   "authors shown" slider if the match is hidden, and restores it on clear; slider
-  changes re-run the layout. A profile of an author who is in the network has a
+  changes re-run the layout. Degree centrality (computed by networkx in
+  `build_chart_data.py`: co-authors among the other 149 / 149, over every link
+  regardless of the sliders) is shown in the node tooltip and in the highlight
+  status line with a rank (ties share it). Caveat for the report: the most
+  "central" authors are common Chinese names without a DBLP number (Wei Wang
+  0.45, Yang Liu 0.44, Wei Li, Yang Li, Yan Li). Each of these names is most
+  likely several different people that DBLP has not split apart, which would
+  inflate their centrality (not verified). A profile of an author who is in the network has a
   "Highlight in network" link (`/?highlight=<name>#network`).
 - **Researcher lookup** (search box in the header of every page): finds any of
   the 4.26M authors. Type a name (any word order, any fragment of 3+ letters,

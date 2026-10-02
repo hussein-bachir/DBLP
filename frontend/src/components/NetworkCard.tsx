@@ -177,7 +177,9 @@ export function NetworkCard() {
       <p className="note">
         The {data ? data.nodes.length : 150} most prolific authors of all time, linked when they share papers and colored by detected
         community. Highlight one of these authors and their co-authors, or use the sliders to thin out the links. Hover a node to isolate
-        its neighbours; drag nodes and scroll to zoom. (To look up anyone in DBLP, use the search at the top of the page.)
+        its neighbours; drag nodes and scroll to zoom. Degree centrality (in the tooltip and when highlighting) is the share of the other
+        authors in this network someone has co-authored with at least once, whatever the sliders show. (To look up anyone in DBLP, use the
+        search at the top of the page.)
       </p>
       {data ? (
         <NetworkExplorer data={data} />

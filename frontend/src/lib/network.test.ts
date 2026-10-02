@@ -19,14 +19,15 @@ import {
 import type { NetworkState } from './network';
 
 // A - B (10), A - C (6), B - C (2), C - D (7), D - E (1), A - F (5)
+// degree = co-authors / (6 - 1), as networkx.degree_centrality computes it
 const FIXTURE: NetworkData = {
   nodes: [
-    { id: 'A', papers: 100, group: 0, degree: 0 },
-    { id: 'B', papers: 80, group: 0, degree: 0 },
-    { id: 'C', papers: 60, group: 1, degree: 0 },
-    { id: 'D', papers: 40, group: 1, degree: 0 },
-    { id: 'E', papers: 20, group: 2, degree: 0 },
-    { id: 'F', papers: 10, group: -1, degree: 0 },
+    { id: 'A', papers: 100, group: 0, degree: 0.6 },
+    { id: 'B', papers: 80, group: 0, degree: 0.4 },
+    { id: 'C', papers: 60, group: 1, degree: 0.6 },
+    { id: 'D', papers: 40, group: 1, degree: 0.4 },
+    { id: 'E', papers: 20, group: 2, degree: 0.2 },
+    { id: 'F', papers: 10, group: -1, degree: 0.2 },
   ],
   edges: [
     { source: 'A', target: 'B', weight: 10 },
@@ -51,6 +52,15 @@ describe('prepareNetwork', () => {
     expect(model.neighbors.get('A')?.get('B')).toBe(10);
     expect(model.neighbors.get('B')?.get('A')).toBe(10);
     expect([...(model.neighbors.get('C')?.keys() ?? [])].sort()).toEqual(['A', 'B', 'D']);
+  });
+
+  it('ranks authors by degree centrality, tied authors sharing a rank', () => {
+    expect(model.centralityRank.get('A')).toBe(1);
+    expect(model.centralityRank.get('C')).toBe(1);
+    expect(model.centralityRank.get('B')).toBe(3);
+    expect(model.centralityRank.get('D')).toBe(3);
+    expect(model.centralityRank.get('E')).toBe(5);
+    expect(model.centralityRank.get('F')).toBe(5);
   });
 });
 
@@ -80,6 +90,11 @@ describe('buildGraph: filtering', () => {
     const view = buildGraph(model, { ...base, topN: 6 });
     expect(ids(view)).toContain('F');
     expect(view.links).toHaveLength(4);
+  });
+
+  it('carries each author’s degree centrality onto the drawn node', () => {
+    const view = buildGraph(model, base);
+    expect(view.nodes.find((n) => n.id === 'B')?.degree).toBe(0.4);
   });
 
   it('sizes nodes by papers relative to the busiest author', () => {
@@ -241,7 +256,7 @@ describe('describeNetwork', () => {
   it('describes the highlighted author', () => {
     const state = { ...base, selected: 'C' };
     expect(describeNetwork(model, state, buildGraph(model, state))).toBe(
-      'C — #3 most prolific, 60 papers, cluster 2. Co-authored with 3 of the other 5 authors (2 at ≥5 shared papers).',
+      'C — #3 most prolific, 60 papers, cluster 2, degree centrality 0.60 (#1 of 6). Co-authored with 3 of the other 5 authors (2 at ≥5 shared papers).',
     );
   });
 });
@@ -259,6 +274,9 @@ describe('networkOption', () => {
 
   it('describes a node or a link in the tooltip, escaping names', () => {
     expect(option.tooltip.formatter({ dataType: 'node', data: { name: '<b>Ann & Bo</b>', value: 1234 } })).toBe('&lt;b&gt;Ann &amp; Bo&lt;/b&gt;: 1,234 papers');
+    expect(option.tooltip.formatter({ dataType: 'node', data: { name: 'A', value: 100, degree: 0.4321 } })).toBe(
+      'A: 100 papers · degree centrality 0.43',
+    );
     expect(option.tooltip.formatter({ dataType: 'edge', data: { source: 'A', target: 'B', value: 10 } })).toBe('A ↔ B: 10 shared papers');
   });
 });
@@ -289,6 +307,14 @@ describe('the real network', () => {
     expect(view.links.every((l) => l.value >= state.minShared && shown.has(l.source) && shown.has(l.target))).toBe(true);
     const linked = new Set(view.links.flatMap((l) => [l.source, l.target]));
     expect(view.nodes.every((n) => linked.has(n.id))).toBe(true); // nobody drawn without a link
+  });
+
+  it('has degree centrality = co-authors among the other authors / (authors - 1), as the status line says', () => {
+    const others = real.byPapers.length - 1;
+    for (const node of real.data.nodes) {
+      const coauthors = real.neighbors.get(node.id)?.size ?? 0;
+      expect(node.degree).toBeCloseTo(coauthors / others, 4); // the builder rounds to 4 decimals
+    }
   });
 
   it('shows every author when nothing is filtered out', () => {

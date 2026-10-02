@@ -18,6 +18,8 @@ export interface NetworkModel {
   /** author -> co-author -> shared papers, over every link (not only the visible ones) */
   neighbors: Map<string, Map<string, number>>;
   maxPapers: number;
+  /** author -> 1-based rank by degree centrality; tied authors share a rank */
+  centralityRank: Map<string, number>;
 }
 
 export interface NetworkState {
@@ -40,6 +42,8 @@ export interface GraphNode {
   fixed: boolean;
   symbolSize: number;
   value: number;
+  /** degree centrality: the share of the other authors this one has co-authored with */
+  degree: number;
   category: number;
   itemStyle: { color: string; opacity: number; borderColor: string; borderWidth: number };
   label: { show: boolean; fontWeight: number; color: string };
@@ -77,7 +81,15 @@ export function prepareNetwork(data: NetworkData): NetworkModel {
     link(edge.source, edge.target, edge.weight);
     link(edge.target, edge.source, edge.weight);
   }
-  return { data, byPapers, rankOf, neighbors, maxPapers: byPapers[0]?.papers ?? 1 };
+  const centralityRank = new Map(
+    data.nodes.map((node) => [node.id, 1 + data.nodes.filter((other) => other.degree > node.degree).length]),
+  );
+  return { data, byPapers, rankOf, neighbors, maxPapers: byPapers[0]?.papers ?? 1, centralityRank };
+}
+
+/** Degree centrality as shown to people: two decimals ("0.43"). */
+export function formatCentrality(degree: number): string {
+  return degree.toFixed(2);
 }
 
 export function initialState(model: NetworkModel): NetworkState {
@@ -177,6 +189,7 @@ export function buildGraph(model: NetworkModel, state: NetworkState): GraphView 
       fixed: at !== undefined,
       symbolSize: 8 + 30 * Math.sqrt(node.papers / model.maxPapers),
       value: node.papers,
+      degree: node.degree,
       category: node.group,
       itemStyle: {
         color: colorOf(node.group),
@@ -220,7 +233,8 @@ export function describeNetwork(model: NetworkModel, state: NetworkState, view: 
   const author = model.byPapers[rank];
   const row = model.neighbors.get(state.selected) ?? new Map<string, number>();
   const strong = [...row.values()].filter((weight) => weight >= state.minShared).length;
-  return `${state.selected} — #${rank + 1} most prolific, ${fmt(author?.papers ?? 0)} papers, cluster ${(author?.group ?? 0) + 1}. Co-authored with ${row.size} of the other ${total - 1} authors (${strong} at ≥${state.minShared} shared papers).`;
+  const centrality = `degree centrality ${formatCentrality(author?.degree ?? 0)} (#${model.centralityRank.get(state.selected) ?? 0} of ${total})`;
+  return `${state.selected} — #${rank + 1} most prolific, ${fmt(author?.papers ?? 0)} papers, cluster ${(author?.group ?? 0) + 1}, ${centrality}. Co-authored with ${row.size} of the other ${total - 1} authors (${strong} at ≥${state.minShared} shared papers).`;
 }
 
 // --------------------------------------------------------------- ECharts option
@@ -231,7 +245,7 @@ function escapeHtml(text: string): string {
 
 interface TooltipParams {
   dataType: string;
-  data: { name?: string; source?: string; target?: string; value: number };
+  data: { name?: string; source?: string; target?: string; value: number; degree?: number };
 }
 
 export function networkOption(view: GraphView): EChartsCoreOption {
@@ -245,7 +259,8 @@ export function networkOption(view: GraphView): EChartsCoreOption {
         if (params.dataType === 'edge') {
           return `${escapeHtml(data.source ?? '')} ↔ ${escapeHtml(data.target ?? '')}: ${data.value} shared papers`;
         }
-        return `${escapeHtml(data.name ?? '')}: ${fmt(data.value)} papers`;
+        const centrality = data.degree === undefined ? '' : ` · degree centrality ${formatCentrality(data.degree)}`;
+        return `${escapeHtml(data.name ?? '')}: ${fmt(data.value)} papers${centrality}`;
       },
     },
     series: [
