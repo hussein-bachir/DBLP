@@ -147,7 +147,7 @@ class _Vectors:
         index = faiss.read_index(os.path.join(self.path, "index.faiss"))
         if hasattr(index, "nprobe"):
             index.nprobe = NPROBE
-        self.model = SentenceTransformer(meta["model"], device=pick_device())
+        self.model = load_model(meta["model"], pick_device())
         self.index, self.meta = index, meta
 
     def search(self, query, k):
@@ -155,6 +155,21 @@ class _Vectors:
         with self._lock:  # FAISS search is thread-safe, but keep the model calls serialized
             _, ids = self.index.search(vec.astype("float32"), k)
         return [int(i) for i in ids[0] if i >= 0]
+
+
+def load_model(name, device):
+    """The sentence-transformer, from the local cache when it is there.
+
+    Loading by name otherwise asks huggingface.co for updates every time, and
+    offline that retries for ~25 s before falling back to the cache; the model
+    never changes, so only the very first load needs the network.
+    """
+    from sentence_transformers import SentenceTransformer
+
+    try:
+        return SentenceTransformer(name, device=device, local_files_only=True)
+    except OSError:  # not downloaded yet
+        return SentenceTransformer(name, device=device)
 
 
 def pick_device():

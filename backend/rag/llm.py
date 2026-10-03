@@ -179,7 +179,8 @@ def resolve(provider_id=None, model=None):
         raise LLMUnavailable(f"Provider '{provider_id}' is not available (no API key set, or not running).")
     p = providers()[provider_id]
     api_key = os.environ.get(p.key_env) if p.key_env else "ollama"
-    client = OpenAI(base_url=p.base_url, api_key=api_key or "none", timeout=90, max_retries=1)
+    # free tiers often answer 429 "retry in 1-2 s"; the SDK waits as told and retries
+    client = OpenAI(base_url=p.base_url, api_key=api_key or "none", timeout=90, max_retries=3)
     return client, (model or avail[provider_id]["default_model"])
 
 
@@ -203,7 +204,8 @@ def describe_error(exc):
     if isinstance(exc, openai.APITimeoutError):   # a subclass of APIConnectionError: check it first
         return "The provider took too long to answer. Try again or switch provider."
     if isinstance(exc, openai.APIConnectionError):
-        return "Couldn't reach the provider (for Ollama: is `ollama serve` running?)."
+        return ("Couldn't reach the provider. Check your internet connection "
+                "(for Ollama: is `ollama serve` running?).")
     if isinstance(exc, openai.BadRequestError):
         return f"The provider refused the request (does this model support tool calling?): {_detail(exc)}"
     if isinstance(exc, openai.APIStatusError):

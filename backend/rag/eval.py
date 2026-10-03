@@ -75,6 +75,19 @@ def retrieval(conn, min_year):
     print(f"{'mean':58}" + "".join(f"{sum(s) / len(s):10.2f}" for s in scores.values()))
 
 
+_DIGIT_SEP = re.compile(r"(?<=\d)[,.\s\u00a0\u202f\u2009'](?=\d{3})")  # thousands separators incl. (narrow) no-break and thin spaces
+
+
+_SPACES = re.compile(r"[\s\u00a0\u202f\u2009]+")
+
+def _plain(text):
+    """Lower-case, thousands separators removed ("12 120" -> "12120"), other spaces made plain.
+
+    GPT-OSS writes narrow no-break spaces both in numbers and between names ("Dusit Niyato").
+    """
+    return _SPACES.sub(" ", _DIGIT_SEP.sub("", text)).lower()
+
+
 def _num(n):
     return {str(n), f"{n:,}"}
 
@@ -105,7 +118,7 @@ def answer_cases(conn):
     ]
 
 
-def answers(conn, provider, model):
+def answers(conn, provider, model, pause):
     correct = 0
     cases = answer_cases(conn)
     for question, accepted in cases:
@@ -121,11 +134,12 @@ def answers(conn, provider, model):
             elif event["type"] == "done":
                 calls = event["tool_calls"]
                 provider, model = event["provider"], event["model"]
-        ok = error is None and any(a.lower() in text.lower() for a in accepted)
+        ok = error is None and any(_plain(a) in _plain(text) for a in accepted)
         correct += ok
         print(f"{'OK ' if ok else 'BAD'} {time.time() - started:5.1f}s {calls} calls  {question}")
         if not ok:
             print(f"      expected one of {sorted(accepted)}; got: {error or text.strip()[:300]!r}")
+        time.sleep(pause)   # free tiers limit tokens per minute
     print(f"\n{correct}/{len(cases)} correct ({provider} / {model})")
 
 
@@ -134,6 +148,7 @@ def main():
     parser.add_argument("--answers", action="store_true", help="also evaluate answers (calls the language model)")
     parser.add_argument("--provider")
     parser.add_argument("--model")
+    parser.add_argument("--pause", type=float, default=8, help="seconds between answer questions (rate limits)")
     parser.add_argument("--min-year", type=int, help="retrieval over papers from this year on "
                                                      "(default: the vectors' own --min-year)")
     args = parser.parse_args()
@@ -147,7 +162,7 @@ def main():
     retrieval(conn, args.min_year or ts.vectors_status(conn)["min_year"])
     if args.answers:
         print()
-        answers(conn, args.provider, args.model)
+        answers(conn, args.provider, args.model, args.pause)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ if __name__ == "__main__":  # run as a script: import from backend/ (author_inde
     sys.path[0] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from author_index import DB_PATH, connect  # noqa: E402
-from rag.title_search import VECTORS_DIR, pick_device  # noqa: E402
+from rag.title_search import VECTORS_DIR, load_model, pick_device  # noqa: E402
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK = 50_000            # titles embedded between progress checkpoints
@@ -80,8 +80,6 @@ def titles_for(conn, ids):
 
 
 def embed(args, conn, out, started, built_at):
-    from sentence_transformers import SentenceTransformer
-
     progress_path = os.path.join(out, "progress.json")
     ids_path = os.path.join(out, "ids.npy")
     vec_path = os.path.join(out, "vectors.f16")
@@ -93,7 +91,7 @@ def embed(args, conn, out, started, built_at):
                  f"({ {k: progress.get(k) for k in wanted} }). Re-run with --restart to discard it.")
 
     device = args.device or pick_device()
-    model = SentenceTransformer(args.model, device=device)
+    model = load_model(args.model, device)
     if device == "cuda":
         model.half()   # fp16 on the GPU: about twice as fast, same vectors to 3 decimals
     dims = model.get_sentence_embedding_dimension()
