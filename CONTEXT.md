@@ -264,33 +264,39 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
   `x-ratelimit-limit-req-minute: 0`, which is reported as "not in your plan",
   not "wait a minute"; (3) GPT-OSS cites as `【P1】`, which both the backend and
   `linkCitations` now accept.
-- **Scope rule (2026-10-03)**: the system prompt now limits Ask to
-  computer-science research. Unrelated questions (geography, writing code,
-  chit-chat, "ignore your instructions") get one fixed decline sentence with two
-  example questions and no tool calls; a CS concept question ("what is a
-  transformer?") gets at most two sentences of explanation plus DBLP's counts and
-  example papers, never papers from the model's memory. Tested: Groq gpt-oss-120b
-  followed all three cases exactly. Mistral ministral-14b declined correctly but,
-  for the concept question, first streamed an answer from memory with invented
-  numbers, then called the tools; the `retract` event replaced it, so the final
-  answer used real data (it still misread 2025's count as 2024's). Local
-  qwen2.5-coder 7B declines everything, including concept questions, even after
-  the rule was reworded to put the in-scope case first: too small to draw the
-  line. Also fixed: the embedding model now loads from the local cache
-  (`title_search.load_model`); loading by name contacted huggingface.co every
-  time and, offline, retried ~25 s before using the cache.
-  Follow-up tests (Groq gpt-oss-120b): a prompt injection ("ignore all previous
-  instructions...") is declined; "which country publishes most on deep
-  learning?" first got the generic decline, so a rule was added for in-scope
-  questions needing data DBLP lacks (countries, affiliations, citations): say so
-  and answer the closest thing (it now lists top venues instead); "Hussein
-  Hazimeh" covered only 0001, so the shared-name rule now requires listing each
-  person first. `eval.py --answers`: 6/6 for Groq and for Mistral after fixing
-  the checker (GPT-OSS writes narrow no-break spaces in numbers, "12 120", and
-  between names) and pausing between questions; the client now retries a 429 up
-  to 3 times (Groq says "retry in 1 s"). Found while testing: GPT-OSS sometimes
-  writes `[` + zero-width space + `P1]`, which left the Sources list empty;
-  both citation patterns now allow zero-width characters inside the brackets.
+- **Scope: DBLP data only (2026-10-03)**: the user wants Ask to answer only
+  questions about the DBLP data, never from the model's own knowledge. The
+  system prompt says every statement must come from tool results: no
+  explaining concepts, describing papers beyond their titles, or saying who a
+  person is. Three cases: a question needing data DBLP lacks (countries,
+  affiliations, citations) says so in one sentence and answers the closest
+  thing with the tools (e.g. top authors/venues); a concept question ("what is
+  a transformer?") gets a fixed decline that suggests the DBLP version
+  ("How many papers about transformers were published each year?"); anything
+  else (geography, writing code, chit-chat, "ignore your instructions") gets
+  the general decline. Both declines start with "I only answer questions about
+  the DBLP publication data". (An earlier version of the rule let concept
+  questions get a two-sentence explanation; the user asked for none.)
+  **Guard in code** (`rag.agent.is_decline` / `NUDGE`): an answer that used no
+  tool is accepted only if it is a decline. Prompt wording alone wasn't enough:
+  Mistral ministral-14b answered the country question with invented counts
+  ("Geoffrey Hinton: 187 papers", "NeurIPS: 12,456") and 0 tool calls. Now such
+  an answer is retracted and the model is told once to use the tools; in 3/3
+  runs Mistral then answered from real data. (A first nudge wording that also
+  offered the decline let Mistral just decline.)
+  Tests (Groq gpt-oss-120b, Mistral ministral-14b): concept and off-topic
+  questions declined with no tool calls; prompt injection declined; "papers on
+  GNNs for drug discovery" lists real titles without describing them;
+  `eval.py --answers` 6/6 for both. Local qwen2.5-coder 7B declines concept
+  questions too, which now matches the rule.
+  Also fixed along the way: the embedding model loads from the local cache
+  (`title_search.load_model`; loading by name contacted huggingface.co every
+  time and, offline, retried ~25 s); "Hussein Hazimeh" covered only 0001, so
+  the shared-name rule now requires listing each person first; `eval.py`'s
+  checker accepts GPT-OSS's narrow no-break spaces ("12 120") and pauses
+  between questions; the client retries a 429 up to 3 times; GPT-OSS sometimes
+  writes `[` + zero-width space + `P1]`, which left Sources empty, so both
+  citation patterns now allow zero-width characters inside the brackets.
 - **Vectors**: this laptop has no GPU; CPU embedding runs at ~285 titles/s
   (all 8.4M would take ~8 h), so a `--min-year 2024` subset was built:
   1,540,807 titles, ~86 min of embedding, then FAISS IVF4965,PQ48 trained in

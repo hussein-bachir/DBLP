@@ -210,3 +210,10 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   results scored below semantic alone in `rag/eval.py` (0.62 vs 0.68). Re-run
   `rag/eval.py` after changing `title_search.hybrid` and keep hybrid at or
   above the better single method.
+- **Ask answers only from DBLP data, enforced in code.** The system prompt
+  forbids answering from the model's own knowledge (no concept explanations,
+  no paper descriptions beyond titles), and `rag.agent.answer` rejects a final
+  answer that used no tool unless it is the decline message (`is_decline`):
+  the text is retracted and the model is nudged once to use the tools.
+  Mistral invented counts with 0 tool calls before this guard. Keep the
+  decline messages starting with `DECLINE_START`, or the guard will nudge them.
