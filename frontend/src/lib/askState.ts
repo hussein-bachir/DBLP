@@ -1,4 +1,4 @@
-import type { AskEvent, AuthorRef, SourcePaper } from '../api/types';
+import type { AskDiagnostics, AskEvent, AuthorRef, SourcePaper } from '../api/types';
 
 export type AskPhase = 'idle' | 'asking' | 'done' | 'stopped' | 'error';
 
@@ -9,7 +9,7 @@ export interface AskState {
   steps: string[]; // what the tools did, in order ("Searching titles for …")
   sources: SourcePaper[];
   authors: AuthorRef[];
-  answeredBy: { provider: string | null; model: string; toolCalls: number } | null;
+  answeredBy: { provider: string | null; model: string; toolCalls: number; diagnostics: AskDiagnostics } | null;
   error: string | null;
 }
 
@@ -56,7 +56,7 @@ export function askReducer(state: AskState, action: AskAction): AskState {
         phase: 'done',
         sources: event.sources,
         authors: event.authors,
-        answeredBy: { provider: event.provider, model: event.model, toolCalls: event.tool_calls },
+        answeredBy: { provider: event.provider, model: event.model, toolCalls: event.tool_calls, diagnostics: event.diagnostics },
       };
     case 'error':
       return { ...state, phase: 'error', error: event.message };

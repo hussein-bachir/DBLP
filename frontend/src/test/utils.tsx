@@ -4,7 +4,7 @@ import type { ReactElement } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
-import type { AskStatus, Paper, Profile, SearchResponse } from '../api/types';
+import type { AskDiagnostics, AskStatus, Paper, Profile, SearchResponse } from '../api/types';
 
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -151,3 +151,36 @@ export const ASK_STATUS: AskStatus = {
   ],
   default_provider: 'groq',
 };
+
+/** Diagnostics of a typical hybrid-search answer; `overrides` replace top-level fields. */
+export function makeDiagnostics(overrides: Partial<AskDiagnostics> = {}): AskDiagnostics {
+  return {
+    total_seconds: 6.12,
+    first_token_seconds: 0.81,
+    model_seconds: 4.2,
+    tool_seconds: 1.9,
+    rounds: 2,
+    tokens: { prompt: 1600, completion: 250 },
+    steps: [
+      {
+        tool: 'search_papers',
+        summary: 'Searching titles for “federated learning healthcare”',
+        seconds: 1.4,
+        results: 12,
+        error: null,
+        search: { methods: ['keyword', 'semantic'], keyword_all: 143, keyword_any: 200, semantic: 200, shown: 12, cap: 200, coverage: 'partial' },
+      },
+      { tool: 'topic_stats', summary: 'Counting titles containing “federated learning” by year', seconds: 0.5, results: 9, error: null, search: null },
+    ],
+    search: { searches: 1, methods: ['keyword', 'semantic'], coverage: 'partial', semantic_min_year: 2024 },
+    citations: { cited: 6, valid: 5, dropped: 1 },
+    guard_nudged: false,
+    retracted: 0,
+    declined: false,
+    tested: {
+      search: { method: 'hybrid', precision: 0.68, queries: 10, min_year: 2024, date: '2026-10-09' },
+      model: { correct: 6, total: 6, date: '2026-10-09' },
+    },
+    ...overrides,
+  };
+}

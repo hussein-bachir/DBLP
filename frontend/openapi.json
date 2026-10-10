@@ -236,6 +236,123 @@
   },
   "components": {
     "schemas": {
+      "AskCitations": {
+        "properties": {
+          "cited": {
+            "type": "integer",
+            "title": "Cited"
+          },
+          "valid": {
+            "type": "integer",
+            "title": "Valid"
+          },
+          "dropped": {
+            "type": "integer",
+            "title": "Dropped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cited",
+          "valid",
+          "dropped"
+        ],
+        "title": "AskCitations"
+      },
+      "AskDiagnostics": {
+        "properties": {
+          "total_seconds": {
+            "type": "number",
+            "title": "Total Seconds"
+          },
+          "first_token_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Token Seconds"
+          },
+          "model_seconds": {
+            "type": "number",
+            "title": "Model Seconds"
+          },
+          "tool_seconds": {
+            "type": "number",
+            "title": "Tool Seconds"
+          },
+          "rounds": {
+            "type": "integer",
+            "title": "Rounds"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskTokens"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AskStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "search": {
+            "$ref": "#/components/schemas/AskSearchSummary"
+          },
+          "citations": {
+            "$ref": "#/components/schemas/AskCitations"
+          },
+          "guard_nudged": {
+            "type": "boolean",
+            "title": "Guard Nudged"
+          },
+          "retracted": {
+            "type": "integer",
+            "title": "Retracted"
+          },
+          "declined": {
+            "type": "boolean",
+            "title": "Declined"
+          },
+          "tested": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskTested"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_seconds",
+          "first_token_seconds",
+          "model_seconds",
+          "tool_seconds",
+          "rounds",
+          "tokens",
+          "steps",
+          "search",
+          "citations",
+          "guard_nudged",
+          "retracted",
+          "declined",
+          "tested"
+        ],
+        "title": "AskDiagnostics",
+        "description": "How this answer was produced: timings, search use, checks, and the measured test accuracy."
+      },
       "AskDoneEvent": {
         "properties": {
           "type": {
@@ -275,6 +392,9 @@
           "tool_calls": {
             "type": "integer",
             "title": "Tool Calls"
+          },
+          "diagnostics": {
+            "$ref": "#/components/schemas/AskDiagnostics"
           }
         },
         "type": "object",
@@ -284,7 +404,8 @@
           "authors",
           "provider",
           "model",
-          "tool_calls"
+          "tool_calls",
+          "diagnostics"
         ],
         "title": "AskDoneEvent"
       },
@@ -393,6 +514,114 @@
         ],
         "title": "AskRetractEvent"
       },
+      "AskSearchStats": {
+        "properties": {
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Methods"
+          },
+          "keyword_all": {
+            "type": "integer",
+            "title": "Keyword All"
+          },
+          "keyword_any": {
+            "type": "integer",
+            "title": "Keyword Any"
+          },
+          "semantic": {
+            "type": "integer",
+            "title": "Semantic"
+          },
+          "shown": {
+            "type": "integer",
+            "title": "Shown"
+          },
+          "cap": {
+            "type": "integer",
+            "title": "Cap"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "full",
+                  "partial",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "methods",
+          "keyword_all",
+          "keyword_any",
+          "semantic",
+          "shown",
+          "cap",
+          "coverage"
+        ],
+        "title": "AskSearchStats"
+      },
+      "AskSearchSummary": {
+        "properties": {
+          "searches": {
+            "type": "integer",
+            "title": "Searches"
+          },
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Methods"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "full",
+                  "partial",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage"
+          },
+          "semantic_min_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Min Year"
+          }
+        },
+        "type": "object",
+        "required": [
+          "searches",
+          "methods",
+          "coverage",
+          "semantic_min_year"
+        ],
+        "title": "AskSearchSummary"
+      },
       "AskStatus": {
         "properties": {
           "keyword_search": {
@@ -479,6 +708,172 @@
         ],
         "title": "AskStatusEvent"
       },
+      "AskStep": {
+        "properties": {
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "seconds": {
+            "type": "number",
+            "title": "Seconds"
+          },
+          "results": {
+            "type": "integer",
+            "title": "Results"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskSearchStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "tool",
+          "summary",
+          "seconds",
+          "results",
+          "error",
+          "search"
+        ],
+        "title": "AskStep"
+      },
+      "AskTested": {
+        "properties": {
+          "search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskTestedSearch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskTestedModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "search",
+          "model"
+        ],
+        "title": "AskTested",
+        "description": "Accuracy measured offline by rag/eval.py on test questions, not on this answer."
+      },
+      "AskTestedModel": {
+        "properties": {
+          "correct": {
+            "type": "integer",
+            "title": "Correct"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "correct",
+          "total",
+          "date"
+        ],
+        "title": "AskTestedModel"
+      },
+      "AskTestedSearch": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "precision": {
+            "type": "number",
+            "title": "Precision"
+          },
+          "queries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queries"
+          },
+          "min_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Year"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "precision",
+          "queries",
+          "min_year",
+          "date"
+        ],
+        "title": "AskTestedSearch"
+      },
       "AskTokenEvent": {
         "properties": {
           "type": {
@@ -497,6 +892,24 @@
           "text"
         ],
         "title": "AskTokenEvent"
+      },
+      "AskTokens": {
+        "properties": {
+          "prompt": {
+            "type": "integer",
+            "title": "Prompt"
+          },
+          "completion": {
+            "type": "integer",
+            "title": "Completion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt",
+          "completion"
+        ],
+        "title": "AskTokens"
       },
       "AuthorRef": {
         "properties": {

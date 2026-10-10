@@ -21,6 +21,63 @@ const sourcePaper = z.object({
   n_authors: z.number().int(),
 });
 
+const count = z.number().int().nonnegative();
+const coverage = z.enum(['full', 'partial', 'none']).nullable();
+
+const searchStats = z.object({
+  methods: z.array(z.string()),
+  keyword_all: count,
+  keyword_any: count,
+  semantic: count,
+  shown: count,
+  cap: count,
+  coverage,
+});
+
+// How the answer was produced (see AskDiagnostics in backend/api.py).
+const diagnostics = z.object({
+  total_seconds: z.number(),
+  first_token_seconds: z.number().nullable(),
+  model_seconds: z.number(),
+  tool_seconds: z.number(),
+  rounds: count,
+  tokens: z.object({ prompt: count, completion: count }).nullable(),
+  steps: z.array(
+    z.object({
+      tool: z.string(),
+      summary: z.string(),
+      seconds: z.number(),
+      results: count,
+      error: z.string().nullable(),
+      search: searchStats.nullable(),
+    }),
+  ),
+  search: z.object({
+    searches: count,
+    methods: z.array(z.string()),
+    coverage,
+    semantic_min_year: z.number().int().nullable(),
+  }),
+  citations: z.object({ cited: count, valid: count, dropped: count }),
+  guard_nudged: z.boolean(),
+  retracted: count,
+  declined: z.boolean(),
+  tested: z
+    .object({
+      search: z
+        .object({
+          method: z.string(),
+          precision: z.number(),
+          queries: z.number().int().nullable(),
+          min_year: z.number().int().nullable(),
+          date: z.string().nullable(),
+        })
+        .nullable(),
+      model: z.object({ correct: count, total: count, date: z.string().nullable() }).nullable(),
+    })
+    .nullable(),
+});
+
 export const AskEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('status'), text: z.string() }),
   z.object({ type: z.literal('token'), text: z.string() }),
@@ -32,6 +89,7 @@ export const AskEventSchema = z.discriminatedUnion('type', [
     provider: z.string().nullable(),
     model: z.string(),
     tool_calls: z.number().int(),
+    diagnostics,
   }),
   z.object({ type: z.literal('error'), message: z.string() }),
 ]);

@@ -7,6 +7,7 @@ import { AskError, askStream } from '../api/ask';
 import { describeError } from '../api/client';
 import { useAskStatus } from '../api/hooks';
 import type { AskStatus, SourcePaper } from '../api/types';
+import { AnswerDetails } from '../components/AnswerDetails';
 import { NameWithTag } from '../components/NameWithTag';
 import { askReducer, initialAskState } from '../lib/askState';
 import { linkCitations, sourceAnchor } from '../lib/citations';
@@ -282,13 +283,6 @@ export default function AskPage() {
             </p>
           )}
           {state.phase === 'stopped' && <p className="profile-note">Stopped.</p>}
-          {state.answeredBy && (
-            <p className="profile-count">
-              Answered by {state.answeredBy.model}
-              {state.answeredBy.provider && ` (${state.answeredBy.provider})`} after {plural(state.answeredBy.toolCalls, 'lookup')}. Language
-              models can misread their tool results: check the figures against the sources.
-            </p>
-          )}
           {state.authors.length > 0 && (
             <section className="profile-panel">
               <h3>Researchers mentioned</h3>
@@ -314,6 +308,9 @@ export default function AskPage() {
                 ))}
               </ol>
             </section>
+          )}
+          {state.answeredBy && (
+            <AnswerDetails diagnostics={state.answeredBy.diagnostics} model={state.answeredBy.model} provider={state.answeredBy.provider} />
           )}
         </div>
       )}

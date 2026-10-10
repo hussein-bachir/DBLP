@@ -3,6 +3,7 @@ data/raw/dblp.xml.gz
 data/processed/*.csv
 data/processed/*.sqlite*
 data/processed/title_vectors/
+data/processed/eval_results.json
 
 # matplotlib/seaborn chart output (regenerate via analysis/visualize_dblp*.py / analyze_*.py)
 analysis/charts/*.png

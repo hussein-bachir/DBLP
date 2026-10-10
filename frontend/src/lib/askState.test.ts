@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AskEvent } from '../api/types';
+import { makeDiagnostics } from '../test/utils';
 import { askReducer, initialAskState, type AskState } from './askState';
 
 const asking = askReducer(initialAskState, { type: 'start', question: 'q?' });
 const feed = (state: AskState, ...events: AskEvent[]) => events.reduce((s, event) => askReducer(s, { type: 'event', event }), state);
 
-const DONE: AskEvent = { type: 'done', sources: [], authors: [{ id: 3, name: 'Ada' }], provider: 'groq', model: 'm', tool_calls: 2 };
+const DONE: AskEvent = {
+  type: 'done',
+  sources: [],
+  authors: [{ id: 3, name: 'Ada' }],
+  provider: 'groq',
+  model: 'm',
+  tool_calls: 2,
+  diagnostics: makeDiagnostics(),
+};
 
 describe('askReducer', () => {
   it('starts from a clean slate for each question', () => {
@@ -30,7 +39,7 @@ describe('askReducer', () => {
     const state = feed(asking, { type: 'token', text: 'x' }, DONE);
     expect(state.phase).toBe('done');
     expect(state.authors).toEqual([{ id: 3, name: 'Ada' }]);
-    expect(state.answeredBy).toEqual({ provider: 'groq', model: 'm', toolCalls: 2 });
+    expect(state.answeredBy).toEqual({ provider: 'groq', model: 'm', toolCalls: 2, diagnostics: makeDiagnostics() });
   });
 
   it('reports an error event', () => {

@@ -772,3 +772,82 @@ footer {
 .ask-sources li.is-flashed {
   animation: flash 1.6s ease-out;
 }
+
+/* ---------- ask: how the answer was produced ---------- */
+.ask-details {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--hairline);
+  padding-top: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.ask-details summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ask-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.ask-details-line {
+  font-family: var(--mono);
+  font-size: 0.76rem;
+}
+
+.ask-details-toggle {
+  color: var(--brass-gold);
+  font-size: 0.78rem;
+}
+
+.ask-details-toggle::after {
+  content: ' \25BE';
+}
+
+.ask-details[open] .ask-details-toggle::after {
+  content: ' \25B4';
+}
+
+.ask-details dl {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 82ch;
+  margin: 0.85rem 0 0;
+}
+
+.ask-details-row {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  column-gap: 1rem;
+}
+
+.ask-details dt {
+  grid-column: 1;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ask-details dd {
+  grid-column: 2;
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 560px) {
+  .ask-details-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ask-details dt,
+  .ask-details dd {
+    grid-column: 1;
+  }
+}

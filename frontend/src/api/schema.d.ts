@@ -131,6 +131,43 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AskCitations */
+        AskCitations: {
+            /** Cited */
+            cited: number;
+            /** Valid */
+            valid: number;
+            /** Dropped */
+            dropped: number;
+        };
+        /**
+         * AskDiagnostics
+         * @description How this answer was produced: timings, search use, checks, and the measured test accuracy.
+         */
+        AskDiagnostics: {
+            /** Total Seconds */
+            total_seconds: number;
+            /** First Token Seconds */
+            first_token_seconds: number | null;
+            /** Model Seconds */
+            model_seconds: number;
+            /** Tool Seconds */
+            tool_seconds: number;
+            /** Rounds */
+            rounds: number;
+            tokens: components["schemas"]["AskTokens"] | null;
+            /** Steps */
+            steps: components["schemas"]["AskStep"][];
+            search: components["schemas"]["AskSearchSummary"];
+            citations: components["schemas"]["AskCitations"];
+            /** Guard Nudged */
+            guard_nudged: boolean;
+            /** Retracted */
+            retracted: number;
+            /** Declined */
+            declined: boolean;
+            tested: components["schemas"]["AskTested"] | null;
+        };
         /** AskDoneEvent */
         AskDoneEvent: {
             /**
@@ -148,6 +185,7 @@ export interface components {
             model: string;
             /** Tool Calls */
             tool_calls: number;
+            diagnostics: components["schemas"]["AskDiagnostics"];
         };
         /** AskErrorEvent */
         AskErrorEvent: {
@@ -187,6 +225,34 @@ export interface components {
              */
             type: "retract";
         };
+        /** AskSearchStats */
+        AskSearchStats: {
+            /** Methods */
+            methods: string[];
+            /** Keyword All */
+            keyword_all: number;
+            /** Keyword Any */
+            keyword_any: number;
+            /** Semantic */
+            semantic: number;
+            /** Shown */
+            shown: number;
+            /** Cap */
+            cap: number;
+            /** Coverage */
+            coverage: ("full" | "partial" | "none") | null;
+        };
+        /** AskSearchSummary */
+        AskSearchSummary: {
+            /** Searches */
+            searches: number;
+            /** Methods */
+            methods: string[];
+            /** Coverage */
+            coverage: ("full" | "partial" | "none") | null;
+            /** Semantic Min Year */
+            semantic_min_year: number | null;
+        };
         /** AskStatus */
         AskStatus: {
             /** Keyword Search */
@@ -214,6 +280,50 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** AskStep */
+        AskStep: {
+            /** Tool */
+            tool: string;
+            /** Summary */
+            summary: string;
+            /** Seconds */
+            seconds: number;
+            /** Results */
+            results: number;
+            /** Error */
+            error: string | null;
+            search: components["schemas"]["AskSearchStats"] | null;
+        };
+        /**
+         * AskTested
+         * @description Accuracy measured offline by rag/eval.py on test questions, not on this answer.
+         */
+        AskTested: {
+            search: components["schemas"]["AskTestedSearch"] | null;
+            model: components["schemas"]["AskTestedModel"] | null;
+        };
+        /** AskTestedModel */
+        AskTestedModel: {
+            /** Correct */
+            correct: number;
+            /** Total */
+            total: number;
+            /** Date */
+            date: string | null;
+        };
+        /** AskTestedSearch */
+        AskTestedSearch: {
+            /** Method */
+            method: string;
+            /** Precision */
+            precision: number;
+            /** Queries */
+            queries: number | null;
+            /** Min Year */
+            min_year: number | null;
+            /** Date */
+            date: string | null;
+        };
         /** AskTokenEvent */
         AskTokenEvent: {
             /**
@@ -223,6 +333,13 @@ export interface components {
             type: "token";
             /** Text */
             text: string;
+        };
+        /** AskTokens */
+        AskTokens: {
+            /** Prompt */
+            prompt: number;
+            /** Completion */
+            completion: number;
         };
         /** AuthorRef */
         AuthorRef: {

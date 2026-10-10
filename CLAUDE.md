@@ -62,7 +62,12 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
   Ollama, or any OpenAI-compatible URL; keys in `backend/.env`, template
   `backend/.env.example`), `build_title_index.py`, `build_title_vectors.py`,
   `ask_cli.py` (same agent from the terminal) and `eval.py` (retrieval
-  precision per method, answer correctness per model). The four scripts run
+  precision per method, answer correctness per model; it saves them to
+  `data/processed/eval_results.json`, gitignored, which every answer quotes).
+  Each answer's `done` event carries `diagnostics` (timings, tokens, search
+  methods and candidate counts, semantic coverage of the asked years, citation
+  checks, guard/retract counts, and those test-set figures), shown on the page
+  as a summary line with a collapsible Details panel (`src/lib/diagnostics.ts`). The four scripts run
   from any folder (`python backend/rag/ask_cli.py`): each one, when run
   directly, swaps `backend/rag/` for `backend/` at the front of `sys.path`.
 - `frontend/` — the React + Vite + TypeScript app: a dashboard of 11 charts plus

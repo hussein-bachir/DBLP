@@ -272,8 +272,29 @@ def recent(conn, k=20, **filters):
         [*params, k])]
 
 
+def semantic_coverage(conn, year_from=None, year_to=None):
+    """How much of the asked year range the vectors cover: "full", "partial" or "none".
+
+    The vectors may cover only papers from their --min-year on (2024 on the
+    laptop build); older papers are then found by keyword search alone.
+    """
+    vec = vectors_status(conn)
+    if not vec["available"]:
+        return "none"
+    start = vec["min_year"]
+    if start is None or (year_from is not None and year_from >= start):
+        return "full"
+    if year_to is not None and year_to < start:
+        return "none"
+    return "partial"
+
+
 def hybrid(conn, query, k=20, **filters):
-    """{"papers": [...], "methods": [...]}: the best k papers by keyword and meaning together.
+    """{"papers", "methods", "stats"}: the best k papers by keyword and meaning together.
+
+    stats (for the answer's diagnostics): how many candidates each method found
+    (keyword_all = titles with every query word, keyword_any = with some), how
+    many papers are returned, and the semantic coverage of the asked years.
 
     Keyword search votes in the fusion only with titles that contain EVERY
     query word: titles sharing one loose word ("model", "data") are noise for
@@ -285,20 +306,29 @@ def hybrid(conn, query, k=20, **filters):
     An empty query lists the newest papers matching the filters instead.
     """
     if not (query or "").strip():
-        return {"papers": papers(conn, recent(conn, k, **filters)), "methods": ["filter"]}
+        found = papers(conn, recent(conn, k, **filters))
+        return {"papers": found, "methods": ["filter"],
+                "stats": {"keyword_all": 0, "keyword_any": 0, "semantic": 0, "shown": len(found),
+                          "cap": FETCH, "coverage": None}}
     methods, any_words, all_words = [], [], []
     if has_bm25(conn):
         all_words = bm25(conn, query, FETCH, mode="all", **filters)
         any_words = bm25(conn, query, FETCH, mode="any", **filters)
         methods.append("keyword")
-    sem = semantic(conn, query, FETCH, **filters)
+    coverage = semantic_coverage(conn, filters.get("year_from"), filters.get("year_to"))
+    # no vectors for any asked year: skip the search (and, in a fresh process, loading the model)
+    sem = [] if coverage == "none" else semantic(conn, query, FETCH, **filters)
     if sem:
         methods.append("semantic")
         ranked = rrf(all_words, sem) if all_words else sem
     else:
         ranked = all_words
     ranked = list(dict.fromkeys([*ranked[:k], *any_words]))   # partial matches only fill up
-    return {"papers": papers(conn, ranked[:k]), "methods": methods}
+    found = papers(conn, ranked[:k])
+    stats = {"keyword_all": len(all_words), "keyword_any": len(any_words), "semantic": len(sem),
+             "shown": len(found), "cap": FETCH,   # candidate counts stop at FETCH
+             "coverage": coverage}
+    return {"papers": found, "methods": methods, "stats": stats}
 
 
 # ------------------------------------------------------------- aggregates

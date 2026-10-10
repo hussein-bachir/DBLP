@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { eventStream, jsonResponse } from '../test/utils';
+import { eventStream, jsonResponse, makeDiagnostics } from '../test/utils';
 import { AskError, askStream, createSseParser } from './ask';
 import type { AskEvent } from './types';
 
@@ -51,7 +51,7 @@ describe('askStream', () => {
       eventStream([
         { type: 'status', text: 'Searching' },
         { type: 'token', text: 'Hi' },
-        { type: 'done', sources: [], authors: [], provider: 'groq', model: 'm', tool_calls: 1 },
+        { type: 'done', sources: [], authors: [], provider: 'groq', model: 'm', tool_calls: 1, diagnostics: makeDiagnostics() },
       ]),
     );
     expect(events.map((e) => e.type)).toEqual(['status', 'token', 'done']);

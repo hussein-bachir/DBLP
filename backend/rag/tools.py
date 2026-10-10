@@ -86,6 +86,14 @@ def _filters(args):
     return out
 
 
+def _result_count(result):
+    """How many items a tool returned (papers, groups, candidates), for the trace."""
+    for key in ("papers", "groups", "candidates", "newest_papers"):
+        if isinstance(result.get(key), list):
+            return len(result[key])
+    return 0
+
+
 class Toolbox:
     """The tools for one question, and the papers/authors they have shown the model."""
 
@@ -95,6 +103,8 @@ class Toolbox:
         self.refs = {}       # paper id -> "P#"
         self.papers = {}     # "P#" -> paper dict, for the sources list
         self.authors = {}    # author id -> name, for links in the answer
+        self.trace = []      # one entry per call, for the answer's diagnostics (not sent to the model)
+        self._search_stats = None
 
     def describe(self, name, args):
         """A one-line, user-facing description of a tool call, for the progress line."""
@@ -111,7 +121,22 @@ class Toolbox:
         return f"Calling {name}"
 
     def call(self, name, args):
-        """Run one tool; always returns a JSON-able dict (errors included, for the model to see)."""
+        """Run one tool; always returns a JSON-able dict (errors included, for the model to see).
+
+        Also appends {tool, summary, seconds, results, error, search} to self.trace.
+        """
+        started = time.monotonic()
+        self._search_stats = None
+        result = self._run(name, args)
+        self.trace.append({
+            "tool": name, "summary": self.describe(name, args),
+            "seconds": round(time.monotonic() - started, 3),
+            "results": _result_count(result), "error": result.get("error"),
+            "search": self._search_stats,
+        })
+        return result
+
+    def _run(self, name, args):
         method = getattr(self, "_" + name, None)
         if method is None or name not in {t["function"]["name"] for t in TOOLS}:
             return {"error": f"unknown tool {name}"}
@@ -149,6 +174,7 @@ class Toolbox:
     def _search_papers(self, args):
         limit = _clamp(args.get("limit"), 1, 25, 12)
         result = ts.hybrid(self.conn, str(args.get("query") or ""), limit, **_filters(args))
+        self._search_stats = {"methods": result["methods"], **result["stats"]}
         return {"papers": [self._compact(p) for p in result["papers"]],
                 "matched_by": result["methods"]}
 

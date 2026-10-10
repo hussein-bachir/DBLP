@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import type { AskEvent, SourcePaper } from '../api/types';
-import { ASK_STATUS, eventStream, jsonResponse, renderWithProviders, stubApi } from '../test/utils';
+import { ASK_STATUS, eventStream, makeDiagnostics, jsonResponse, renderWithProviders, stubApi } from '../test/utils';
 import AskPage, { EXAMPLES } from './AskPage';
 
 const SOURCE: SourcePaper = {
@@ -25,8 +25,10 @@ const ANSWER: AskEvent[] = [
   { type: 'status', text: 'Searching titles for “federated learning healthcare”' },
   { type: 'token', text: 'One survey stands out [P1]' },
   { type: 'token', text: ', and another [P9].' },
-  { type: 'done', sources: [SOURCE], authors: [{ id: 7, name: 'Fei Wang 0001' }], provider: 'groq', model: 'llama-3.3-70b-versatile', tool_calls: 1 },
+  { type: 'done', sources: [SOURCE], authors: [{ id: 7, name: 'Fei Wang 0001' }], provider: 'groq', model: 'llama-3.3-70b-versatile', tool_calls: 1, diagnostics: makeDiagnostics() },
 ];
+
+const SUMMARY = 'hybrid search · 2 lookups · 6.1 s · 1,850 tokens · 1 made-up citation dropped';
 
 function askRequests(fetchMock: ReturnType<typeof stubApi>): RequestInit[] {
   return fetchMock.mock.calls.filter(([input]) => String(input) === '/api/ask').map(([, init]) => init ?? {});
@@ -65,7 +67,7 @@ describe('AskPage', () => {
     renderWithProviders(<AskPage />);
     await ask('federated learning in healthcare?');
 
-    expect(await screen.findByText(/Answered by llama-3\.3-70b-versatile \(groq\) after 1 lookup\./)).toBeInTheDocument();
+    expect(await screen.findByText(SUMMARY)).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'What the model looked up' })).toHaveTextContent('Searching titles for “federated learning healthcare”');
 
     const answer = screen.getByText(/One survey stands out/).closest('.ask-answer') as HTMLElement;
@@ -84,6 +86,21 @@ describe('AskPage', () => {
     expect(askBodies(fetchMock)).toEqual([{ question: 'federated learning in healthcare?', provider: 'groq', model: null }]);
   });
 
+  it('shows how the answer was produced, details closed until asked for', async () => {
+    stubApi({ '/api/ask/status': () => jsonResponse(ASK_STATUS), '/api/ask': () => eventStream(ANSWER) });
+    renderWithProviders(<AskPage />);
+    await ask('federated learning in healthcare?');
+
+    const details = (await screen.findByText(SUMMARY)).closest('details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    await userEvent.setup().click(within(details).getByText('Details'));
+    expect(details.open).toBe(true);
+    expect(details).toHaveTextContent('llama-3.3-70b-versatile (groq)');
+    expect(details).toHaveTextContent('Semantic search covers only 2024 on; older papers were found by keyword alone.');
+    expect(details).toHaveTextContent('5 of 6 citations match papers the tools returned.');
+    expect(details).toHaveTextContent('These are test-set figures, not a measurement of this answer.');
+  });
+
   it('sends the chosen provider and model', async () => {
     const fetchMock = stubApi({ '/api/ask/status': () => jsonResponse(ASK_STATUS), '/api/ask': () => eventStream(ANSWER) });
     renderWithProviders(<AskPage />);
@@ -92,7 +109,7 @@ describe('AskPage', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Model provider' }), 'ollama');
     await user.type(screen.getByRole('combobox', { name: 'Model' }), 'llama3.1:8b');
     await ask('q');
-    await screen.findByText(/Answered by/);
+    await screen.findByText(SUMMARY);
     expect(askBodies(fetchMock)[0]).toMatchObject({ provider: 'ollama', model: 'llama3.1:8b' });
   });
 

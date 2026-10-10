@@ -297,6 +297,27 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
   between questions; the client retries a 429 up to 3 times; GPT-OSS sometimes
   writes `[` + zero-width space + `P1]`, which left Sources empty, so both
   citation patterns now allow zero-width characters inside the brackets.
+- **Per-answer diagnostics (2026-10-09)**: every answer now shows how it was
+  produced: a summary line (e.g. "hybrid search · 2 lookups · 6.1 s · 1,850
+  tokens") with a collapsible Details panel listing search methods and candidate
+  counts, the semantic coverage of the asked years (full / partial / none: the
+  vectors cover 2024+), the time split between model and tools, tokens, citation
+  checks, and whether the guard or a retract fired. Accuracy of a single answer
+  can't be measured (no ground truth), so the panel quotes `rag/eval.py`'s
+  test-set figures, now saved to `data/processed/eval_results.json`, and keeps
+  three layers apart: data (exact queries, but title keywords only), search
+  (precision@20: keyword 0.62, semantic/hybrid 0.68) and model (answer checks:
+  Groq gpt-oss-120b 6/6, Mistral ministral-14b 6/6; Ollama untested). Tokens are
+  reported by Groq, Mistral and Ollama (`stream_options.include_usage`, with a
+  fallback for providers that reject it). What the panel exposed right away:
+  (1) the embedding model's first load costs ~18 s per process (fine in the
+  server after the first question; a startup warm-up would remove it);
+  (2) semantic search ran and discarded everything for years it doesn't cover,
+  so `hybrid` now skips it when coverage is "none" ("before 2020" question:
+  22.9 s -> 4.6 s; eval scores unchanged); (3) with Ollama loaded, a simple
+  count took 24 s instead of 1.2 s (RAM pressure evicts SQLite's cache);
+  (4) some Groq answers list papers without citing them (0 citations), which
+  is now visible per answer.
 - **Vectors**: this laptop has no GPU; CPU embedding runs at ~285 titles/s
   (all 8.4M would take ~8 h), so a `--min-year 2024` subset was built:
   1,540,807 titles, ~86 min of embedding, then FAISS IVF4965,PQ48 trained in

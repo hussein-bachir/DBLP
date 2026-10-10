@@ -19,3 +19,4 @@ export type AskEvent = Schemas['AskEvent'];
 export type AskDoneEvent = Schemas['AskDoneEvent'];
 export type SourcePaper = Schemas['SourcePaper'];
 export type AuthorRef = Schemas['AuthorRef'];
+export type AskDiagnostics = Schemas['AskDiagnostics'];

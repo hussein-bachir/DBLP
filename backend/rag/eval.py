@@ -20,6 +20,7 @@
    not the retrieval.
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -72,13 +73,15 @@ def retrieval(conn, min_year):
             scores[name].append(p)
             row.append(p)
         print(f"{query[:57]:58}" + "".join(f"{p:10.2f}" for p in row))
-    print(f"{'mean':58}" + "".join(f"{sum(s) / len(s):10.2f}" for s in scores.values()))
+    means = {name: round(sum(s) / len(s), 2) for name, s in scores.items()}
+    print(f"{'mean':58}" + "".join(f"{m:10.2f}" for m in means.values()))
+    return {"methods": means, "queries": len(TOPICS), "k": K, "min_year": min_year,
+            "date": time.strftime("%Y-%m-%d")}
 
 
 _DIGIT_SEP = re.compile(r"(?<=\d)[,.\s\u00a0\u202f\u2009'](?=\d{3})")  # thousands separators incl. (narrow) no-break and thin spaces
-
-
 _SPACES = re.compile(r"[\s\u00a0\u202f\u2009]+")
+
 
 def _plain(text):
     """Lower-case, thousands separators removed ("12 120" -> "12120"), other spaces made plain.
@@ -141,6 +144,27 @@ def answers(conn, provider, model, pause):
             print(f"      expected one of {sorted(accepted)}; got: {error or text.strip()[:300]!r}")
         time.sleep(pause)   # free tiers limit tokens per minute
     print(f"\n{correct}/{len(cases)} correct ({provider} / {model})")
+    return f"{provider}/{model}", {"correct": correct, "total": len(cases), "date": time.strftime("%Y-%m-%d")}
+
+
+def save_results(retrieval_scores, answer_scores=None):
+    """Write the figures the Ask page shows under each answer (rag.agent.tested_figures).
+
+    Answer scores are kept per provider/model, so evaluating one model keeps the others'.
+    """
+    try:
+        with open(rag_agent.EVAL_RESULTS, encoding="utf-8") as f:
+            results = json.load(f)
+    except (OSError, ValueError):
+        results = {}
+    results["retrieval"] = retrieval_scores
+    if answer_scores:
+        results.setdefault("answers", {})[answer_scores[0]] = answer_scores[1]
+    tmp = rag_agent.EVAL_RESULTS + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
+    os.replace(tmp, rag_agent.EVAL_RESULTS)
+    print(f"\nsaved to {os.path.abspath(rag_agent.EVAL_RESULTS)} (shown under each answer on the Ask page)")
 
 
 def main():
@@ -159,10 +183,12 @@ def main():
         sys.exit(NOT_BUILT)
     if not ts.has_bm25(conn):
         sys.exit("Title index not built yet. Run: python rag/build_title_index.py")
-    retrieval(conn, args.min_year or ts.vectors_status(conn)["min_year"])
+    retrieval_scores = retrieval(conn, args.min_year or ts.vectors_status(conn)["min_year"])
+    answer_scores = None
     if args.answers:
         print()
-        answers(conn, args.provider, args.model, args.pause)
+        answer_scores = answers(conn, args.provider, args.model, args.pause)
+    save_results(retrieval_scores, answer_scores)
 
 
 if __name__ == "__main__":

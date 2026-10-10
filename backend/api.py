@@ -161,6 +161,80 @@ class AskRetractEvent(BaseModel):
     type: Literal["retract"]        # drop the answer text streamed so far (it was preamble to a tool call)
 
 
+class AskSearchStats(BaseModel):
+    methods: list[str]              # "keyword", "semantic" (or "filter" for a query-less listing)
+    keyword_all: int                # candidates whose title has every query word (stops at `cap`)
+    keyword_any: int                # candidates whose title has some query words
+    semantic: int                   # nearest titles by meaning
+    shown: int                      # papers returned to the model
+    cap: int
+    coverage: Literal["full", "partial", "none"] | None   # semantic coverage of the asked years
+
+
+class AskStep(BaseModel):
+    tool: str
+    summary: str                    # e.g. 'Searching titles for "federated learning"'
+    seconds: float
+    results: int                    # papers / groups / candidates returned
+    error: str | None
+    search: AskSearchStats | None   # only for search_papers
+
+
+class AskSearchSummary(BaseModel):
+    searches: int
+    methods: list[str]              # union over all searches of this answer
+    coverage: Literal["full", "partial", "none"] | None   # the worst coverage of any search
+    semantic_min_year: int | None   # the vectors cover papers from this year on (None: all years)
+
+
+class AskTokens(BaseModel):
+    prompt: int
+    completion: int
+
+
+class AskCitations(BaseModel):
+    cited: int                      # distinct [P#] refs in the answer
+    valid: int                      # refs a tool actually returned (listed as sources)
+    dropped: int                    # refs the model made up
+
+
+class AskTestedSearch(BaseModel):
+    method: str
+    precision: float                # precision@k on rag/eval.py's test queries
+    queries: int | None
+    min_year: int | None
+    date: str | None
+
+
+class AskTestedModel(BaseModel):
+    correct: int                    # rag/eval.py answer checks passed
+    total: int
+    date: str | None
+
+
+class AskTested(BaseModel):
+    """Accuracy measured offline by rag/eval.py on test questions, not on this answer."""
+    search: AskTestedSearch | None
+    model: AskTestedModel | None
+
+
+class AskDiagnostics(BaseModel):
+    """How this answer was produced: timings, search use, checks, and the measured test accuracy."""
+    total_seconds: float
+    first_token_seconds: float | None
+    model_seconds: float            # time spent waiting for the language model
+    tool_seconds: float             # time spent in the database / search tools
+    rounds: int                     # model calls
+    tokens: AskTokens | None        # None: the provider doesn't report usage
+    steps: list[AskStep]
+    search: AskSearchSummary
+    citations: AskCitations
+    guard_nudged: bool              # the model first answered without tools and was told to retry
+    retracted: int                  # streamed drafts withdrawn (preambles, answers from memory)
+    declined: bool                  # the question was out of scope
+    tested: AskTested | None        # None: rag/eval.py has not been run yet
+
+
 class AskDoneEvent(BaseModel):
     type: Literal["done"]
     sources: list[SourcePaper]      # the papers the answer cites, in order of first citation
@@ -168,6 +242,7 @@ class AskDoneEvent(BaseModel):
     provider: str | None
     model: str
     tool_calls: int
+    diagnostics: AskDiagnostics
 
 
 class AskErrorEvent(BaseModel):

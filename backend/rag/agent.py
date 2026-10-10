@@ -13,10 +13,13 @@ server-sent events and rag/ask_cli.py prints:
 The model gets at most MAX_ROUNDS rounds of tool calls, then must answer.
 """
 import json
+import os
 import re
+import time
 from collections import Counter
 
-from rag import llm
+from author_index import HERE
+from rag import llm, title_search
 from rag import tools as rag_tools
 
 MAX_ROUNDS = 5
@@ -90,6 +93,50 @@ def is_decline(text):
     return text.strip().strip("*_\"'“").startswith(DECLINE_START)
 
 
+EVAL_RESULTS = os.path.join(HERE, "..", "data", "processed", "eval_results.json")
+_COVERAGE_ORDER = {"none": 0, "partial": 1, "full": 2}
+
+
+def search_summary(conn, trace):
+    """Which search methods the answer used, and the worst semantic coverage of the years searched."""
+    searches = [step["search"] for step in trace if step.get("search")]
+    methods = sorted({m for s in searches for m in s["methods"]})
+    coverages = [s["coverage"] for s in searches if s.get("coverage")]
+    return {
+        "searches": len(searches),
+        "methods": methods,
+        "coverage": min(coverages, key=_COVERAGE_ORDER.get) if coverages else None,
+        "semantic_min_year": title_search.vectors_status(conn)["min_year"],
+    }
+
+
+def _method_name(methods):
+    """The eval.py name for the search methods used: hybrid, keyword, semantic or None."""
+    if {"keyword", "semantic"} <= set(methods):
+        return "hybrid"
+    return methods[0] if len(methods) == 1 and methods[0] in ("keyword", "semantic") else None
+
+
+def tested_figures(provider, model, methods):
+    """Accuracy measured offline by rag/eval.py for what this answer used (None if never measured).
+
+    These are test-set figures, not a measurement of this particular answer.
+    """
+    try:
+        with open(EVAL_RESULTS, encoding="utf-8") as f:
+            results = json.load(f)
+    except (OSError, ValueError):
+        return None
+    retrieval = results.get("retrieval") or {}
+    method = _method_name(methods)
+    scores = retrieval.get("methods") or {}
+    search = None
+    if method in scores:
+        search = {"method": method, "precision": scores[method], "queries": retrieval.get("queries"),
+                  "min_year": retrieval.get("min_year"), "date": retrieval.get("date")}
+    return {"search": search, "model": (results.get("answers") or {}).get(f"{provider}/{model}")}
+
+
 def _system_prompt(conn):
     meta = dict(conn.execute("SELECT k, v FROM meta"))
     return SYSTEM.format(papers=int(meta["papers"]), authors=int(meta["authors"]),
@@ -121,24 +168,51 @@ def mentioned_authors(text, known):
     return out
 
 
-def _stream_round(client, model, messages, tools):
-    """One model call, streamed. Yields ("token", text) while it comes, then ("end", text, tool_calls)."""
+_NO_USAGE = set()   # base URLs that rejected stream_options (token counts then unknown)
+
+
+def _stream_round(client, model, messages, tools, meter):
+    """One model call, streamed. Yields ("token", text) while it comes, then ("end", text, tool_calls).
+
+    Token usage, when the provider reports it, is added to `meter` ({"prompt", "completion",
+    "missing"}): it comes on the last chunk if stream_options.include_usage is accepted.
+    """
+    import openai
+
     kwargs = {"model": model, "messages": messages, "stream": True, "temperature": 0.2}
     if tools:
         kwargs.update(tools=tools, tool_choice="auto")
+    key = str(client.base_url)
+    if key not in _NO_USAGE:
+        kwargs["stream_options"] = {"include_usage": True}
     text, calls = [], {}
-    stream = client.chat.completions.create(**kwargs)
     try:
-        yield from _read_stream(stream, text, calls)
+        stream = client.chat.completions.create(**kwargs)
+    except openai.BadRequestError:
+        if "stream_options" not in kwargs:
+            raise
+        _NO_USAGE.add(key)   # this provider doesn't take the option: ask without it from now on
+        del kwargs["stream_options"]
+        stream = client.chat.completions.create(**kwargs)
+    usage = {}
+    try:
+        yield from _read_stream(stream, text, calls, usage)
     finally:  # also when the caller stops early (user pressed Stop): end generation at the provider
         stream.close()
+    if usage:
+        meter["prompt"] += usage["prompt"]
+        meter["completion"] += usage["completion"]
+    else:
+        meter["missing"] = True
     tool_calls = [{"id": c["id"] or f"call_{i}", "name": c["name"], "arguments": c["arguments"]}
                   for i, c in sorted(calls.items()) if c["name"]]
     yield ("end", "".join(text), tool_calls)
 
 
-def _read_stream(stream, text, calls):
+def _read_stream(stream, text, calls, usage):
     for chunk in stream:
+        if getattr(chunk, "usage", None):
+            usage.update(prompt=chunk.usage.prompt_tokens or 0, completion=chunk.usage.completion_tokens or 0)
         if not chunk.choices:
             continue
         delta = chunk.choices[0].delta
@@ -203,6 +277,9 @@ def answer(conn, question, provider=None, model=None, cancelled=lambda: False):
         return
     provider = provider or llm.default_provider()
 
+    started = time.monotonic()
+    meter = {"prompt": 0, "completion": 0, "missing": False}
+    first_token, model_seconds, rounds, retracted = None, 0.0, 0, 0
     box = rag_tools.Toolbox(conn, cancelled)
     messages = [{"role": "system", "content": _system_prompt(conn)},
                 {"role": "user", "content": question}]
@@ -211,14 +288,19 @@ def answer(conn, question, provider=None, model=None, cancelled=lambda: False):
         for round_no in range(MAX_ROUNDS + 1):
             tools = rag_tools.TOOLS if round_no < MAX_ROUNDS else None   # last round: answer now
             streamed = False
-            for item in _stream_round(client, model, messages, tools):
+            round_started = time.monotonic()
+            rounds += 1
+            for item in _stream_round(client, model, messages, tools, meter):
                 if cancelled():
                     return
                 if item[0] == "token":
                     streamed = True
+                    if first_token is None:
+                        first_token = time.monotonic() - started
                     yield {"type": "token", "text": item[1]}
                     continue
                 _, text, calls = item
+            model_seconds += time.monotonic() - round_started
             if not calls and tools:
                 calls = text_tool_calls(text)
                 if calls:
@@ -228,6 +310,7 @@ def answer(conn, question, provider=None, model=None, cancelled=lambda: False):
                     # answered from memory without looking anything up: drop it, ask again once
                     nudged = True
                     if streamed:
+                        retracted += 1
                         yield {"type": "retract"}
                     messages += [{"role": "assistant", "content": text},
                                  {"role": "user", "content": NUDGE}]
@@ -235,6 +318,7 @@ def answer(conn, question, provider=None, model=None, cancelled=lambda: False):
                 final = text
                 break
             if streamed:
+                retracted += 1
                 yield {"type": "retract"}
             messages.append({"role": "assistant", "content": text or None, "tool_calls": [
                 {"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": c["arguments"] or "{}"}}
@@ -255,7 +339,23 @@ def answer(conn, question, provider=None, model=None, cancelled=lambda: False):
     if not final.strip():
         yield {"type": "error", "message": "The model returned an empty answer. Try again or switch model."}
         return
-    sources = [{"ref": ref, **box.papers[ref]} for ref in cited_refs(final) if ref in box.papers]
+    cited = cited_refs(final)
+    sources = [{"ref": ref, **box.papers[ref]} for ref in cited if ref in box.papers]
     authors = mentioned_authors(final, box.authors)
+    diagnostics = {
+        "total_seconds": round(time.monotonic() - started, 2),
+        "first_token_seconds": None if first_token is None else round(first_token, 2),
+        "model_seconds": round(model_seconds, 2),
+        "tool_seconds": round(sum(step["seconds"] for step in box.trace), 2),
+        "rounds": rounds,
+        "tokens": None if meter["missing"] else {"prompt": meter["prompt"], "completion": meter["completion"]},
+        "steps": box.trace,
+        "search": search_summary(conn, box.trace),
+        "citations": {"cited": len(cited), "valid": len(sources), "dropped": len(cited) - len(sources)},
+        "guard_nudged": nudged,
+        "retracted": retracted,
+        "declined": n_calls == 0 and is_decline(final),
+    }
+    diagnostics["tested"] = tested_figures(provider, model, diagnostics["search"]["methods"])
     yield {"type": "done", "sources": sources, "authors": authors,
-           "provider": provider, "model": model, "tool_calls": n_calls}
+           "provider": provider, "model": model, "tool_calls": n_calls, "diagnostics": diagnostics}
