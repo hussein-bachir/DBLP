@@ -133,7 +133,9 @@ Data flows one way: `pipeline/` → `data/` → `backend/` → `frontend/`.
    step 3 (ids change); the API detects a stale index via `meta.json` and falls
    back to keyword search. Without it Ask is keyword-only.
 4. `python server.py [port]` from `backend/` (default 8000, localhost only)
-   serves the API and the built front end. The `/api/*` JSON contract (field
+   serves the API and the built front end; at startup it loads the semantic-search
+   model in a background thread (`title_search.warm_up`, ~10-40 s; the server answers
+   meanwhile and a question that needs it waits). The `/api/*` JSON contract (field
    names, `{"error": ...}` bodies, 503 + `"ready": false` when the index is
    missing) is what the front end depends on; change models and front end
    together.

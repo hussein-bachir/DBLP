@@ -16,9 +16,10 @@ import json
 import os
 import re
 import threading
+import time
 from collections import Counter
 
-from author_index import HERE, venue_of
+from author_index import HERE, connect, venue_of
 
 VECTORS_DIR = os.environ.get(
     "TITLE_VECTORS_PATH", os.path.join(HERE, "..", "data", "processed", "title_vectors"))
@@ -186,6 +187,30 @@ def pick_device():
 
 
 _vectors = _Vectors(VECTORS_DIR)
+
+
+def warm_up(db_path):
+    """Load the embedding model and FAISS index before the first question needs them.
+
+    Loading takes ~10-20 s on a laptop CPU (more with a cold disk cache); api.py
+    runs this in a background thread at startup so the first answer doesn't pay
+    for it. A question that arrives meanwhile waits on the loader's lock instead
+    of loading a second copy. Does nothing without a vector index.
+    """
+    started = time.monotonic()
+    conn = connect(db_path)
+    if conn is None:
+        return
+    try:
+        if not _vectors.load(_index_built_at(conn)):
+            if _vectors.error:
+                print(f"semantic search unavailable: {_vectors.error}")
+            return
+        _vectors.search("warm up", 1)   # the first encode is slower than later ones
+        print(f"semantic search ready: {_vectors.meta['papers']:,} title vectors "
+              f"loaded in {time.monotonic() - started:.1f} s", flush=True)
+    finally:
+        conn.close()
 
 
 def _index_built_at(conn):

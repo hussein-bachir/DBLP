@@ -22,7 +22,7 @@ import os
 import queue
 import sqlite3
 import threading
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Annotated, Literal, Union
 
@@ -258,7 +258,16 @@ class AskEvent(RootModel):
 
 # --------------------------------------------------------------------- app
 
+@asynccontextmanager
+async def lifespan(_app):
+    # load the semantic-search model in the background: the server answers at once,
+    # and the model is usually ready before the first question arrives
+    threading.Thread(target=ts.warm_up, args=(INDEX_PATH,), daemon=True, name="search-warm-up").start()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="DBLP dashboard API",
     description="Search researchers in the DBLP dump and read their publication profiles. Read-only.",
     version="1.0.0",

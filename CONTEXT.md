@@ -318,6 +318,23 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
   count took 24 s instead of 1.2 s (RAM pressure evicts SQLite's cache);
   (4) some Groq answers list papers without citing them (0 citations), which
   is now visible per answer.
+- **Search model loaded at startup (2026-10-10)**: the embedding model and
+  FAISS index used to load on the first question that needed them (18-47 s on
+  that question). `api.py` now starts `title_search.warm_up` in a background
+  thread from FastAPI's lifespan hook, so the server answers at once (status in
+  0.01 s during loading), the model is ready ~35 s later on a cold disk cache,
+  and the first question took 6.1 s in total (search 3.8 s). A question arriving
+  during loading waits on the loader's lock instead of loading a second copy.
+  Measured again after a restart: model loaded in 16.8 s (warm disk cache); a
+  question that arrived mid-load waited on the lock (search 12.9 s) and did not
+  load a second copy.
+  While testing this, `backend/rag/title_search.py` was overwritten on disk three
+  times by something outside this session: twice with the commit-ac13b4c version
+  (identical to the `.claude/worktrees/rag-slides` copy), dropping the diagnostics
+  code, and once with an interleaved, corrupted mix that no longer parsed. It
+  stopped once the user closed the file in their editor; the file was restored
+  from git and watched for 60 s. Close or reload files open in an editor before
+  changing them outside it, and check `git diff` before committing.
 - **Vectors**: this laptop has no GPU; CPU embedding runs at ~285 titles/s
   (all 8.4M would take ~8 h), so a `--min-year 2024` subset was built:
   1,540,807 titles, ~86 min of embedding, then FAISS IVF4965,PQ48 trained in
