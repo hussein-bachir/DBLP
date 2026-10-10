@@ -224,3 +224,8 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   the text is retracted and the model is nudged once to use the tools.
   Mistral invented counts with 0 tool calls before this guard. Keep the
   decline messages starting with `DECLINE_START`, or the guard will nudge them.
+- **Ask: keep `hybrid`'s "some words" query lazy.** It is the slowest search
+  query (common words match hundreds of thousands of titles) and only fills a
+  short list, so it runs only when fewer than k papers were found; running it
+  always added 1-2 s per search for identical results. `author_index.connect`
+  also sets `PRAGMA mmap_size`, since every request opens a fresh connection.

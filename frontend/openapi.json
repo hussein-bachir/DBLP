@@ -528,7 +528,14 @@
             "title": "Keyword All"
           },
           "keyword_any": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Keyword Any"
           },
           "semantic": {

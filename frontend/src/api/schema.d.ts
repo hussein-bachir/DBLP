@@ -232,7 +232,7 @@ export interface components {
             /** Keyword All */
             keyword_all: number;
             /** Keyword Any */
-            keyword_any: number;
+            keyword_any: number | null;
             /** Semantic */
             semantic: number;
             /** Shown */

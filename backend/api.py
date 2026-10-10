@@ -164,7 +164,7 @@ class AskRetractEvent(BaseModel):
 class AskSearchStats(BaseModel):
     methods: list[str]              # "keyword", "semantic" (or "filter" for a query-less listing)
     keyword_all: int                # candidates whose title has every query word (stops at `cap`)
-    keyword_any: int                # candidates whose title has some query words
+    keyword_any: int | None         # candidates with some query words; None: not needed (list already full)
     semantic: int                   # nearest titles by meaning
     shown: int                      # papers returned to the model
     cap: int

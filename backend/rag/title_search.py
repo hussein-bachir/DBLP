@@ -333,12 +333,12 @@ def hybrid(conn, query, k=20, **filters):
     if not (query or "").strip():
         found = papers(conn, recent(conn, k, **filters))
         return {"papers": found, "methods": ["filter"],
-                "stats": {"keyword_all": 0, "keyword_any": 0, "semantic": 0, "shown": len(found),
+                "stats": {"keyword_all": 0, "keyword_any": None, "semantic": 0, "shown": len(found),
                           "cap": FETCH, "coverage": None}}
-    methods, any_words, all_words = [], [], []
-    if has_bm25(conn):
+    methods, all_words = [], []
+    keyword = has_bm25(conn)
+    if keyword:
         all_words = bm25(conn, query, FETCH, mode="all", **filters)
-        any_words = bm25(conn, query, FETCH, mode="any", **filters)
         methods.append("keyword")
     coverage = semantic_coverage(conn, filters.get("year_from"), filters.get("year_to"))
     # no vectors for any asked year: skip the search (and, in a fresh process, loading the model)
@@ -348,9 +348,17 @@ def hybrid(conn, query, k=20, **filters):
         ranked = rrf(all_words, sem) if all_words else sem
     else:
         ranked = all_words
-    ranked = list(dict.fromkeys([*ranked[:k], *any_words]))   # partial matches only fill up
+    # Titles with only some of the words just fill up a short list. Scoring them is the
+    # slowest query here (common words match hundreds of thousands of titles), so it
+    # runs only when the list is short; the results are the same either way.
+    any_words = None
+    if keyword and len(ranked) < k:
+        any_words = bm25(conn, query, FETCH, mode="any", **filters)
+        ranked = list(dict.fromkeys([*ranked, *any_words]))
     found = papers(conn, ranked[:k])
-    stats = {"keyword_all": len(all_words), "keyword_any": len(any_words), "semantic": len(sem),
+    stats = {"keyword_all": len(all_words),
+             "keyword_any": None if any_words is None else len(any_words),   # None: not needed
+             "semantic": len(sem),
              "shown": len(found), "cap": FETCH,   # candidate counts stop at FETCH
              "coverage": coverage}
     return {"papers": found, "methods": methods, "stats": stats}

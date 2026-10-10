@@ -335,6 +335,24 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
   stopped once the user closed the file in their editor; the file was restored
   from git and watched for 60 s. Close or reload files open in an editor before
   changing them outside it, and check `git diff` before committing.
+- **Faster answers (2026-10-10)**: measured with a throwaway benchmark
+  (`.claude/bench/`, untracked): search on fixed queries with a fresh connection
+  per run, the slow count queries, and five questions end to end on Groq.
+  (1) `hybrid` ran the "some words" keyword query on every search although its
+  results only fill a list that is short; it now runs only then
+  (`keyword_any` is null in the diagnostics otherwise). Same results on every
+  benchmark query; searches 0.9-2.5 s -> 0.03-0.34 s. (2) `author_index.connect`
+  sets `PRAGMA mmap_size`: each request opens a new connection, so SQLite's own
+  page cache always started empty. Counts 2.5-3x faster ("deep learning" by
+  author 3.45 -> 1.10 s, "learning" by author 2024+ 6.6 -> 2.3 s), and first runs
+  no longer spike to 5-13 s. SQLite caps the mapping at ~2 GB of the 2.8 GB file.
+  (3) Asking the model to request all lookups in one turn was tried and
+  reverted: rounds went up (2,2,3,3,3 -> 3,2,4,3,4) and tokens with them.
+  End to end (with pauses for rate limits): 2.5-33.4 s before, 1.6-3.8 s after;
+  tool time 0.1-20.8 s -> 0.0-1.0 s. Search precision unchanged (0.62 / 0.68 /
+  0.68), Groq 6/6. Remaining latency is mostly the model side, and on Groq's free
+  tier long waits are rate-limit retries (seen: 6 s then 30 s) once a question
+  sends ~8-11k tokens; sending fewer tokens per question would cut those.
 - **Vectors**: this laptop has no GPU; CPU embedding runs at ~285 titles/s
   (all 8.4M would take ~8 h), so a `--min-year 2024` subset was built:
   1,540,807 titles, ~86 min of embedding, then FAISS IVF4965,PQ48 trained in

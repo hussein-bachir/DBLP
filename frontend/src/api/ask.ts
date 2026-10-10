@@ -27,7 +27,7 @@ const coverage = z.enum(['full', 'partial', 'none']).nullable();
 const searchStats = z.object({
   methods: z.array(z.string()),
   keyword_all: count,
-  keyword_any: count,
+  keyword_any: count.nullable(), // null: the some-words query wasn't needed
   semantic: count,
   shown: count,
   cap: count,

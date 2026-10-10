@@ -26,6 +26,7 @@ _SUFFIX = re.compile(r"\s+\d{4}$")
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 MAX_QUERY_CHARS = 100
+MMAP_BYTES = 4 * 1024**3   # asks for the whole file (~2.8 GB); SQLite caps it at its build's maximum (~2 GB here)
 MAX_QUERY_TOKENS = 5
 
 
@@ -46,6 +47,10 @@ def connect(path=DB_PATH):
         return None
     conn = sqlite3.connect("file:" + os.path.abspath(path).replace("\\", "/") + "?mode=ro", uri=True, timeout=10)
     conn.execute("PRAGMA query_only = ON")
+    # Read the file through the OS page cache instead of copying pages into each
+    # connection's own small cache: every request opens a new connection, so that
+    # cache always started empty. The mapping only reserves address space.
+    conn.execute(f"PRAGMA mmap_size = {MMAP_BYTES}")
     return conn
 
 

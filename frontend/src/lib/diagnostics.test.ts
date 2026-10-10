@@ -49,6 +49,12 @@ describe('detailRows', () => {
     expect(lines.join(' ')).toContain('12 shown, from 143 titles with every word, 200+ with some words and 200+ close in meaning');
   });
 
+  it('leaves out the some-words count when that query was not needed', () => {
+    const d = makeDiagnostics();
+    d.steps[0] = { ...d.steps[0]!, search: { ...d.steps[0]!.search!, keyword_any: null } };
+    expect(row('Search', d).join(' ')).toContain('12 shown, from 143 titles with every word and 200+ close in meaning.');
+  });
+
   it('describes full and missing coverage', () => {
     const full = makeDiagnostics({ search: { searches: 1, methods: ['keyword', 'semantic'], coverage: 'full', semantic_min_year: 2024 } });
     expect(row('Search', full)).toContain('Semantic search covers 2024 on, which includes all the years searched.');

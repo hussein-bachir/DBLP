@@ -73,10 +73,10 @@ function searchRow(d: AskDiagnostics): DetailRow {
   for (const step of d.steps) {
     const s = step.search;
     if (!s) continue;
-    lines.push(
-      `${step.summary}: ${fmt(s.shown)} shown, from ${capped(s.keyword_all, s.cap)} titles with every word, ` +
-        `${capped(s.keyword_any, s.cap)} with some words and ${capped(s.semantic, s.cap)} close in meaning.`,
-    );
+    const found = [`${capped(s.keyword_all, s.cap)} titles with every word`];
+    if (s.keyword_any !== null) found.push(`${capped(s.keyword_any, s.cap)} with some words`); // null: not needed
+    found.push(`${capped(s.semantic, s.cap)} close in meaning`);
+    lines.push(`${step.summary}: ${fmt(s.shown)} shown, from ${found.slice(0, -1).join(', ')} and ${found.at(-1)}.`);
   }
   return { label: 'Search', lines };
 }

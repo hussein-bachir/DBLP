@@ -71,7 +71,7 @@ def print_diagnostics(d):
         s = step["search"]
         if s:
             cap = s["cap"]
-            n = lambda v: f"{v}+" if v >= cap else str(v)
+            n = lambda v: "not needed" if v is None else f"{v}+" if v >= cap else str(v)
             line += (f" [{'+'.join(s['methods'])}: all words {n(s['keyword_all'])}, some words "
                      f"{n(s['keyword_any'])}, by meaning {n(s['semantic'])}; semantic coverage {s['coverage']}]")
         if step["error"]:
