@@ -353,6 +353,41 @@ model that calls fixed tools over `authors.sqlite`, and cites the papers it used
   0.68), Groq 6/6. Remaining latency is mostly the model side, and on Groq's free
   tier long waits are rate-limit retries (seen: 6 s then 30 s) once a question
   sends ~8-11k tokens; sending fewer tokens per question would cut those.
+- **Smaller tool results (2026-10-10)**: Groq's free tier for gpt-oss-120b
+  allows 8,000 tokens per minute and 1,000 requests per day (read from its
+  rate-limit headers); one question above 8k tokens hits the limit on its own.
+  Everything a tool returns is re-sent in every later round, so `rag/tools.py`
+  now sends the model less (constants at the top): searches default to 10
+  papers, every paper names at most 3 authors ("+N more"), profiles keep 6 top
+  venues and co-authors and 5 newest papers, and the incomplete-years note is
+  shorter. The page's source list still gets the full records. Measured offline
+  (chars / 4): tool results ~3,600 -> ~2,200 tokens over a typical set of calls,
+  profiles ~930 -> ~415 each, searches ~650 -> ~490. The fixed part sent every
+  round is larger (system prompt ~856 + tool definitions ~764), so a 4-round
+  question such as "Hussein Hazimeh's venues and co-authors" is estimated at
+  ~9k tokens, still over the limit; it was not run live, by the user's
+  instruction to avoid Groq's limits. Live checks, more than a minute apart and
+  with retries off: a paper search 6.6k tokens (3 rounds, 10/10 citations), a
+  count 3.2k tokens (correct). Mistral 6/6 on the answer checks; precision
+  unchanged. Shortening the system prompt and tool definitions would be the next
+  lever, with an eval run since that wording steers the model.
+- **Rate-limit guard and direct profiles (2026-10-10)**: "Where does Hussein
+  Hazimeh 0002 publish, and who are his co-authors?" took long and then failed on
+  Groq: 5 questions in a few minutes overran the 8,000 tokens/minute free tier,
+  and the OpenAI client retried each 429 silently (Groq asked for up to 30 s,
+  three times). (1) `rag/llm.py` `Budget` now records the per-minute budget Groq
+  reports with every response; before each round `rag/agent.py` estimates the
+  request (characters / 4 + 600 for the reply, generous) and either sends it,
+  waits up to 20 s with a "Waiting N s for the provider's per-minute limit"
+  status, or stops at once with "try again in about N s, or switch provider".
+  Client retries are off (`max_retries=0`); a 429 that still happens is waited
+  out only if short. Providers that report no token budget are unaffected.
+  Tested offline (simulated budgets, and a trap that fails the test if a model
+  request is attempted). (2) `author_profile` takes an exact DBLP name
+  ("Hussein Hazimeh 0002"; ambiguous names return the candidates), and the
+  prompt says to use it when the question gives the number, saving the
+  find_author round. That question on Groq: 2 rounds instead of 3, 4,162 tokens,
+  2.7 s, venues and co-authors correct; on Mistral 2 rounds, 4.2 s.
 - **Vectors**: this laptop has no GPU; CPU embedding runs at ~285 titles/s
   (all 8.4M would take ~8 h), so a `--min-year 2024` subset was built:
   1,540,807 titles, ~86 min of embedding, then FAISS IVF4965,PQ48 trained in

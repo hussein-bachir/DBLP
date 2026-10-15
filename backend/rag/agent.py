@@ -13,6 +13,7 @@ server-sent events and rag/ask_cli.py prints:
 The model gets at most MAX_ROUNDS rounds of tool calls, then must answer.
 """
 import json
+import math
 import os
 import re
 import time
@@ -65,7 +66,8 @@ How to answer:
 - Always use the tools; never answer from memory about what is in DBLP. Several calls are fine.
 - For "how many", trends and rankings use topic_stats (exact counts). For examples or "papers \
 about" use search_papers. For a person, call find_author first, then author_profile for the \
-details asked about. If find_author returns several people with the same name (they differ \
+details asked about; if the question gives the exact DBLP name with its number ("Hussein \
+Hazimeh 0002"), call author_profile with that name directly instead. If find_author returns several people with the same name (they differ \
 only by DBLP's number, e.g. 0001 and 0002), always start by saying so, listing each with its \
 paper count and top venues; then give the details for each of them (at most 3, the most \
 prolific first) unless the question names the number. The user can't call tools: never tell them to.
@@ -168,6 +170,18 @@ def mentioned_authors(text, known):
     return out
 
 
+COMPLETION_RESERVE = 600   # tokens kept free for the model's reply when checking the budget
+
+
+def estimate_tokens(messages, tools):
+    """Rough size of the next request (about 4 characters a token, plus room for the reply).
+
+    Used only to decide whether to wait for the per-minute budget; deliberately generous.
+    """
+    chars = len(json.dumps(messages, ensure_ascii=False)) + len(json.dumps(tools or [], ensure_ascii=False))
+    return chars // 4 + COMPLETION_RESERVE
+
+
 _NO_USAGE = set()   # base URLs that rejected stream_options (token counts then unknown)
 
 
@@ -186,14 +200,29 @@ def _stream_round(client, model, messages, tools, meter):
     if key not in _NO_USAGE:
         kwargs["stream_options"] = {"include_usage": True}
     text, calls = [], {}
-    try:
-        stream = client.chat.completions.create(**kwargs)
-    except openai.BadRequestError:
-        if "stream_options" not in kwargs:
-            raise
-        _NO_USAGE.add(key)   # this provider doesn't take the option: ask without it from now on
-        del kwargs["stream_options"]
-        stream = client.chat.completions.create(**kwargs)
+    for attempt in range(3):
+        try:
+            raw = client.chat.completions.with_raw_response.create(**kwargs)
+            break
+        except openai.BadRequestError:
+            if "stream_options" not in kwargs:
+                raise
+            _NO_USAGE.add(key)   # this provider doesn't take the option: ask without it from now on
+            del kwargs["stream_options"]
+        except openai.RateLimitError as exc:
+            # the per-minute budget ran out anyway (other questions, or an estimate too low)
+            headers = exc.response.headers if exc.response is not None else {}
+            wait = llm.seconds_in(headers.get("retry-after")) or llm.seconds_in(headers.get("x-ratelimit-reset-tokens"))
+            if attempt == 2 or wait is None or wait > llm.MAX_WAIT:
+                raise
+            yield ("status", f"Waiting {math.ceil(wait)} s for the provider's per-minute limit")
+            time.sleep(wait)
+        except (openai.APIConnectionError, openai.InternalServerError):
+            if attempt == 2:
+                raise
+            time.sleep(1)
+    llm.budget.observe(key, raw.headers)
+    stream = raw.parse()
     usage = {}
     try:
         yield from _read_stream(stream, text, calls, usage)
@@ -290,9 +319,20 @@ def answer(conn, question, provider=None, model=None, cancelled=lambda: False):
             streamed = False
             round_started = time.monotonic()
             rounds += 1
+            wait = llm.budget.wait_for(str(client.base_url), estimate_tokens(messages, tools))
+            if wait:
+                yield {"type": "status", "text": f"Waiting {math.ceil(wait)} s for the provider's per-minute limit"}
+                waited_until = time.monotonic() + wait
+                while time.monotonic() < waited_until:
+                    if cancelled():
+                        return
+                    time.sleep(0.25)
             for item in _stream_round(client, model, messages, tools, meter):
                 if cancelled():
                     return
+                if item[0] == "status":
+                    yield {"type": "status", "text": item[1]}
+                    continue
                 if item[0] == "token":
                     streamed = True
                     if first_token is None:
@@ -334,6 +374,9 @@ def answer(conn, question, provider=None, model=None, cancelled=lambda: False):
                     return
     except openai.OpenAIError as exc:
         yield {"type": "error", "message": llm.describe_error(exc)}
+        return
+    except llm.BudgetExceeded as exc:
+        yield {"type": "error", "message": str(exc)}
         return
 
     if not final.strip():

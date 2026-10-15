@@ -14,6 +14,14 @@ import time
 import author_index as ai
 from rag import title_search as ts
 
+# How much of each result the model sees. Everything sent is re-sent in every later
+# round, and Groq's free tier limits tokens per minute: a 4-round question used to send
+# ~10k tokens and hit that limit. The page's source list keeps the full paper records.
+SEARCH_DEFAULT = 10        # papers per search unless the model asks for more (max 25)
+AUTHORS_SHOWN = 3          # authors named per paper ("+N more" for the rest)
+PROFILE_TOP = 6            # venues and co-authors in a profile
+PROFILE_PAPERS = 5         # newest papers in a profile
+
 YEAR_INCOMPLETE = 2025   # DBLP is still indexing the latest years (see CLAUDE.md)
 TOOL_SECONDS = 30        # a single tool call is interrupted after this long
 
@@ -38,7 +46,7 @@ TOOLS = [
                       "(then lists that author's newest papers)."},
             **_YEARS,
             "author_id": {"type": "integer", "description": "Only papers by this author (id from find_author)."},
-            "limit": {"type": "integer", "description": "How many papers (default 12, max 25)."},
+            "limit": {"type": "integer", "description": f"How many papers (default {SEARCH_DEFAULT}, max 25)."},
         }, "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "topic_stats",
@@ -62,10 +70,13 @@ TOOLS = [
             "name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {
         "name": "author_profile",
-        "description": "A researcher's profile by id (from find_author): totals, papers per year, top "
-                       "venues, top co-authors and newest papers (citable refs).",
+        "description": "A researcher's profile: totals, papers per year, top venues, top co-authors and "
+                       "newest papers (citable refs). Give author_id (from find_author), or name when "
+                       "the question gives the exact DBLP name with its number.",
         "parameters": {"type": "object", "properties": {
-            "author_id": {"type": "integer"}}, "required": ["author_id"]}}},
+            "author_id": {"type": "integer"},
+            "name": {"type": "string", "description": "Exact DBLP name, e.g. 'Hussein Hazimeh 0002'."},
+        }}}},
 ]
 
 
@@ -164,7 +175,7 @@ class Toolbox:
         return ref
 
     def _compact(self, paper):
-        names = [a["name"] for a in paper["authors"]]
+        names = [a["name"] for a in paper["authors"][:AUTHORS_SHOWN]]
         more = paper["n_authors"] - len(names)
         return {"ref": self._ref(paper), "title": paper["title"], "year": paper["year"],
                 "venue": paper["venue"], "authors": ", ".join(names) + (f" +{more} more" if more > 0 else "")}
@@ -172,7 +183,7 @@ class Toolbox:
     # ------------------------------------------------------------ the tools
 
     def _search_papers(self, args):
-        limit = _clamp(args.get("limit"), 1, 25, 12)
+        limit = _clamp(args.get("limit"), 1, 25, SEARCH_DEFAULT)
         result = ts.hybrid(self.conn, str(args.get("query") or ""), limit, **_filters(args))
         self._search_stats = {"methods": result["methods"], **result["stats"]}
         return {"papers": [self._compact(p) for p in result["papers"]],
@@ -192,8 +203,7 @@ class Toolbox:
             out["author_ids"] = [g["author_id"] for g in result["groups"]]
         years = [g["key"] for g in result["groups"]] if group_by == "year" else []
         if group_by != "year" or any(y >= YEAR_INCOMPLETE for y in years):
-            out["note"] = (f"Counts for {YEAR_INCOMPLETE} and later are incomplete (DBLP is still indexing "
-                           "them); don't read a drop in those years as a real decline.")
+            out["note"] = f"{YEAR_INCOMPLETE}+ counts incomplete (DBLP still indexing), not a real decline"
         return out
 
     def _find_author(self, args):
@@ -209,9 +219,32 @@ class Toolbox:
             out["note"] = f"no exact match; showing close spellings ({result['corrected']})"
         return out
 
+    def _author_id_by_name(self, name):
+        """(author id, None) for an exact DBLP name, else (None, error for the model).
+
+        Uses the folded-name index: "Hussein Hazimeh 0002" folds to "hussein hazimeh",
+        which every same-named person shares; the exact name then picks one of them.
+        """
+        name = " ".join(str(name).split())
+        rows = self.conn.execute("SELECT id, name, n_papers FROM authors WHERE fold = ? ORDER BY n_papers DESC",
+                                 (ai.fold(name),)).fetchall()
+        exact = [r for r in rows if r[1].lower() == name.lower()]
+        if exact:
+            return exact[0][0], None
+        if len(rows) == 1:
+            return rows[0][0], None
+        if not rows:
+            return None, f"no author named {name!r}; use find_author"
+        listed = ", ".join(f"{r[1]} ({r[2]} papers)" for r in rows[:5])
+        return None, f"several DBLP authors are named {name!r}: {listed}; give the exact name or author_id"
+
     def _author_profile(self, args):
         author_id = _clamp(args.get("author_id"), 1, 10**9, None)
-        prof = ai.profile(self.conn, author_id, first_page=12) if author_id else None
+        if author_id is None and args.get("name"):
+            author_id, error = self._author_id_by_name(args["name"])
+            if error:
+                return {"error": error}
+        prof = ai.profile(self.conn, author_id, first_page=0) if author_id else None
         if prof is None:
             return {"error": "no author with that id; use find_author first"}
         self.authors[prof["id"]] = prof["name"]
@@ -219,14 +252,14 @@ class Toolbox:
             self.authors[c["id"]] = c["name"]
         newest = ts.papers(self.conn, [i for (i,) in self.conn.execute(
             "SELECT p.id FROM authorship s JOIN papers p ON p.id = s.paper_id WHERE s.author_id = ? "
-            "ORDER BY p.year IS NULL, p.year DESC, p.id DESC LIMIT 12", (prof["id"],))])
+            "ORDER BY p.year IS NULL, p.year DESC, p.id DESC LIMIT ?", (prof["id"], PROFILE_PAPERS))])
         return {
             "author_id": prof["id"], "name": prof["name"], "papers": prof["n_papers"],
             "years": f"{prof['first_year']}-{prof['last_year']}",
             "journal_articles": prof["n_articles"], "conference_papers": prof["n_inproceedings"],
             "distinct_coauthors": prof["n_coauthors"], "distinct_venues": prof["n_venues"],
             "papers_per_year": prof["per_year"],
-            "top_venues": [[v["venue"], v["count"]] for v in prof["venues"]],
-            "top_coauthors": [[c["name"], c["shared"]] for c in prof["coauthors"][:10]],
+            "top_venues": [[v["venue"], v["count"]] for v in prof["venues"][:PROFILE_TOP]],
+            "top_coauthors": [[c["name"], c["shared"]] for c in prof["coauthors"][:PROFILE_TOP]],
             "newest_papers": [self._compact(p) for p in newest],
         }

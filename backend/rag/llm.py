@@ -17,7 +17,9 @@ Free-tier model names change; if a default stops working, set <ID>_MODEL or
 type another model name in the app.
 """
 import json
+import math
 import os
+import re
 import threading
 import time
 import urllib.request
@@ -179,9 +181,88 @@ def resolve(provider_id=None, model=None):
         raise LLMUnavailable(f"Provider '{provider_id}' is not available (no API key set, or not running).")
     p = providers()[provider_id]
     api_key = os.environ.get(p.key_env) if p.key_env else "ollama"
-    # free tiers often answer 429 "retry in 1-2 s"; the SDK waits as told and retries
-    client = OpenAI(base_url=p.base_url, api_key=api_key or "none", timeout=90, max_retries=3)
+    # no automatic retries: the SDK would wait silently as long as a 429 asks (Groq: up to 30 s,
+    # three times); rag.agent waits only briefly, tells the user, or stops (see Budget)
+    client = OpenAI(base_url=p.base_url, api_key=api_key or "none", timeout=90, max_retries=0)
     return client, (model or avail[provider_id]["default_model"])
+
+
+MAX_WAIT = 20          # seconds worth waiting for a per-minute limit; longer, stop and say so
+_DURATION = re.compile(r"(\d+(?:\.\d+)?)(ms|h|m|s)")
+
+
+def seconds_in(text):
+    """Seconds in a rate-limit duration such as "607ms", "7.66s" or "1m2.3s" (None if unreadable)."""
+    if not text:
+        return None
+    try:
+        return float(text)                      # Retry-After is plain seconds
+    except ValueError:
+        pass
+    parts = _DURATION.findall(text)
+    if not parts:
+        return None
+    unit = {"h": 3600, "m": 60, "s": 1, "ms": 0.001}
+    return sum(float(n) * unit[u] for n, u in parts)
+
+
+class BudgetExceeded(Exception):
+    """The provider's per-minute token limit won't allow the next step soon enough."""
+
+
+class Budget:
+    """Per-minute token budgets of providers that report them (Groq: x-ratelimit-*-tokens).
+
+    Groq's free tier allows 8,000 tokens a minute, refilling continuously, and every
+    model round re-sends the whole conversation, so a question can run out halfway.
+    Before each round the agent asks how long to wait: 0, a few seconds (it waits and
+    says so), or BudgetExceeded with a message saying when to retry.
+    """
+
+    def __init__(self):
+        self._state = {}      # base URL -> (limit, remaining, time observed)
+        self._lock = threading.Lock()
+
+    def observe(self, key, headers):
+        try:
+            limit = int(headers.get("x-ratelimit-limit-tokens"))
+            remaining = max(0, int(headers.get("x-ratelimit-remaining-tokens")))
+        except (TypeError, ValueError):
+            return                                # this provider doesn't report a token budget
+        with self._lock:
+            self._state[key] = (limit, remaining, time.monotonic())
+
+    def available(self, key):
+        """(tokens available now, limit, refill per second), or None if unknown."""
+        with self._lock:
+            state = self._state.get(key)
+        if state is None:
+            return None
+        limit, remaining, at = state
+        rate = limit / 60
+        return min(limit, remaining + rate * (time.monotonic() - at)), limit, rate
+
+    def wait_for(self, key, need):
+        """Seconds to wait before sending about `need` tokens; raises BudgetExceeded if too long."""
+        known = self.available(key)
+        if known is None:
+            return 0.0
+        available, limit, rate = known
+        if need > limit:
+            raise BudgetExceeded(
+                f"This question needs about {need:,} tokens in one step, more than the provider's free "
+                f"tier allows per minute ({limit:,}). Ask something narrower, or switch provider.")
+        if need <= available:
+            return 0.0
+        wait = (need - available) / rate
+        if wait > MAX_WAIT:
+            raise BudgetExceeded(
+                f"The provider's free per-minute limit is used up for now. Try again in about "
+                f"{math.ceil(wait)} s, or switch to another provider (Mistral has its own limit).")
+        return wait
+
+
+budget = Budget()
 
 
 def describe_error(exc):
@@ -193,9 +274,9 @@ def describe_error(exc):
         if headers.get("x-ratelimit-limit-req-minute") == "0":   # Mistral: model not in this key's plan
             return ("Your API key's plan doesn't include this model (its limit is 0 requests per minute). "
                     "Pick another model from the list.")
-        wait = headers.get("retry-after")
-        return ("The provider's free-tier rate limit was hit" +
-                (f"; retry in about {wait} s." if wait else "; wait a minute and retry.") +
+        wait = seconds_in(headers.get("retry-after")) or seconds_in(headers.get("x-ratelimit-reset-tokens"))
+        return ("The provider's free per-minute limit was hit" +
+                (f"; try again in about {math.ceil(wait)} s." if wait else "; wait a minute and try again.") +
                 " Or switch to another provider.")
     if isinstance(exc, openai.AuthenticationError):
         return "The provider rejected the API key. Check it in backend/.env."

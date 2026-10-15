@@ -229,3 +229,12 @@ venue is extracted as `parts[0] + '/' + parts[1]` after splitting on `/`.
   short list, so it runs only when fewer than k papers were found; running it
   always added 1-2 s per search for identical results. `author_index.connect`
   also sets `PRAGMA mmap_size`, since every request opens a fresh connection.
+- **Ask: Groq's free tier allows 8,000 tokens per minute** (gpt-oss-120b; 1,000
+  requests a day). One question re-sends the system prompt, tool definitions and
+  all earlier tool results every round, so a 4-round question can exceed it on its
+  own. Keep tool results small (`SEARCH_DEFAULT`, `AUTHORS_SHOWN`, `PROFILE_*` in
+  `rag/tools.py`), test live with pauses over a minute and retries off, and check
+  a change's token count offline first.
+  The agent checks the budget Groq reports before every round (`llm.Budget`):
+  short waits are shown as a status, long ones stop with a clear message; the
+  OpenAI client's own retries are off so a 429 never means a silent 30-90 s wait.
