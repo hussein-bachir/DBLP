@@ -22,3 +22,7 @@ backend/.env
 *.log
 __pycache__/
 *.pyc
+
+# Claude Code scratch work
+.claude/bench/
+.claude/worktrees/

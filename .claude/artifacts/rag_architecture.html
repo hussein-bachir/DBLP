@@ -1,0 +1,480 @@
+<title>DBLP Ask Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+  /* Layout: one reading column; each mechanism gets a full-width figure with its caption, numbers and file map at the end.
+     Palette and faces follow the project's dashboard (ink navy, brass gold, verdigris; Source Serif 4 + IBM Plex). */
+  :root {
+    --bg: #12172b;
+    --surface: #1a2140;
+    --raised: #171d35;
+    --fg: #ede9e0;
+    --muted: #a3a9c0;
+    --faint: #737a98;
+    --rule: #2f3758;
+    --accent: #c9a227;
+    --accent-2: #5b8a82;
+    --accent-2-text: #8fc1b8;
+    --serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --sans: 'IBM Plex Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f4f8; --surface: #ffffff; --raised: #e9ecf3; --fg: #1a2033; --muted: #4b5370;
+      --faint: #6b7290; --rule: #d3d8e4; --accent: #8a6d12; --accent-2: #3f7068; --accent-2-text: #2f5f57;
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f4f8; --surface: #ffffff; --raised: #e9ecf3; --fg: #1a2033; --muted: #4b5370;
+    --faint: #6b7290; --rule: #d3d8e4; --accent: #8a6d12; --accent-2: #3f7068; --accent-2-text: #2f5f57;
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 var(--sans);
+  }
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 64px;
+    display: grid;
+    gap: 56px;
+  }
+  h1, h2 { font-family: var(--serif); font-weight: 700; text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(2rem, 4.6vw, 3rem); line-height: 1.1; }
+  h2 { font-size: 1.55rem; line-height: 1.2; }
+  p { margin: 0; max-width: 68ch; }
+  code { font-family: var(--mono); font-size: 0.88em; color: var(--accent-2-text); }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .eyebrow {
+    margin: 0 0 12px;
+    font: 500 0.75rem var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  header { display: grid; gap: 18px; }
+  .lede { font-size: 1.1rem; color: var(--muted); }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin: 0;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--rule);
+    list-style: none;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .facts b { font: 500 1rem var(--mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+
+  section { display: grid; gap: 18px; }
+  .sec-head { display: grid; gap: 8px; }
+  .sec-head p { color: var(--muted); }
+
+  figure { margin: 0; display: grid; gap: 12px; }
+  .scroll {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--raised);
+    padding: 12px;
+  }
+  .scroll svg { display: block; width: 100%; min-width: 780px; height: auto; }
+  figcaption { font-size: 0.92rem; color: var(--muted); max-width: 80ch; }
+  figcaption b { color: var(--fg); font-weight: 600; }
+
+  /* diagram marks */
+  .d { color: var(--fg); }
+  .d text { fill: currentColor; font: 12px var(--sans); }
+  .d text.t { font-weight: 600; font-size: 13px; }
+  .d text.m { font-family: var(--mono); font-size: 11.5px; fill: var(--accent-2-text); }
+  .d text.s { font-size: 11.5px; fill: var(--muted); }
+  .d text.lbl { font-size: 11px; fill: var(--muted); font-style: italic; }
+  .d .box { fill: var(--surface); stroke: var(--rule); stroke-width: 1.25; }
+  .d .key { stroke: var(--accent); stroke-width: 1.75; }
+  .d .sem { stroke: var(--accent-2); stroke-width: 1.75; }
+  .d .ln { fill: none; stroke: var(--faint); stroke-width: 1.4; }
+  .d .ah { fill: var(--faint); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0; padding: 0; list-style: none; font-size: 0.85rem; color: var(--muted); }
+  .legend span { display: inline-block; width: 22px; height: 12px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; background: var(--surface); }
+  .legend .k { border: 2px solid var(--accent); }
+  .legend .v { border: 2px solid var(--accent-2); }
+
+  .guards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px 28px; margin: 0; }
+  .guards div { min-width: 0; padding-top: 10px; border-top: 1px solid var(--rule); }
+  .guards dt { font-weight: 600; margin-bottom: 4px; }
+  .guards dd { margin: 0; color: var(--muted); font-size: 0.93rem; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.93rem; min-width: 560px; }
+  th, td { text-align: left; padding: 10px 14px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font: 500 0.72rem var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg); }
+  td.note { color: var(--muted); }
+  td code { white-space: nowrap; }
+
+  footer { font-size: 0.85rem; color: var(--faint); border-top: 1px solid var(--rule); padding-top: 16px; }
+
+  @media (max-width: 560px) {
+    .page { gap: 44px; padding-block: 28px 48px; }
+  }
+</style>
+
+<div class="page">
+  <header>
+    <div>
+      <p class="eyebrow">DBLP dashboard · Ask</p>
+      <h1>How Ask answers a question</h1>
+    </div>
+    <p class="lede">A language model answers questions about the DBLP data by calling four fixed tools over a local index of 8.4&nbsp;million papers. It never writes SQL and never answers from its own knowledge: every number and paper in an answer comes from a tool result, and the code checks that.</p>
+    <ul class="facts" aria-label="Key figures">
+      <li><b>8,423,776</b> papers</li>
+      <li><b>4,263,299</b> authors</li>
+      <li><b>1,540,807</b> papers with meaning vectors (2024 on)</li>
+      <li><b>4</b> tools</li>
+      <li><b>5</b> model providers</li>
+    </ul>
+  </header>
+
+  <section aria-labelledby="s-path">
+    <div class="sec-head">
+      <p class="eyebrow">1 · Request path</p>
+      <h2 id="s-path">From the question box to the database and back</h2>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="d" viewBox="0 0 1020 320" role="img" aria-label="The Ask page posts the question to FastAPI, which runs the agent loop in a worker thread. The agent exchanges messages with a language model and calls four tools, which query authors.sqlite and the FAISS title vectors. Events stream back to the page.">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <!-- boxes -->
+          <rect class="box" x="16" y="170" width="140" height="84" rx="6"/>
+          <text class="t" x="86" y="203" text-anchor="middle">Ask page</text>
+          <text class="m" x="86" y="224" text-anchor="middle">React · /ask</text>
+
+          <rect class="box" x="226" y="170" width="140" height="84" rx="6"/>
+          <text class="t" x="296" y="203" text-anchor="middle">FastAPI</text>
+          <text class="m" x="296" y="224" text-anchor="middle">POST /api/ask</text>
+
+          <rect class="box" x="436" y="16" width="170" height="64" rx="6"/>
+          <text class="t" x="521" y="42" text-anchor="middle">Language model</text>
+          <text class="m" x="521" y="62" text-anchor="middle">Groq · Mistral · Ollama</text>
+
+          <rect class="box key" x="436" y="150" width="170" height="124" rx="6"/>
+          <text class="t" x="521" y="176" text-anchor="middle">Agent loop</text>
+          <text class="s" x="521" y="198" text-anchor="middle">worker thread</text>
+          <text class="s" x="521" y="216" text-anchor="middle">own SQLite connection</text>
+          <text class="s" x="521" y="234" text-anchor="middle">up to 5 tool rounds</text>
+          <text class="s" x="521" y="252" text-anchor="middle">guards and checks</text>
+
+          <rect class="box" x="676" y="150" width="140" height="124" rx="6"/>
+          <text class="t" x="746" y="176" text-anchor="middle">Tools</text>
+          <text class="m" x="746" y="200" text-anchor="middle">search_papers</text>
+          <text class="m" x="746" y="218" text-anchor="middle">topic_stats</text>
+          <text class="m" x="746" y="236" text-anchor="middle">find_author</text>
+          <text class="m" x="746" y="254" text-anchor="middle">author_profile</text>
+
+          <rect class="box" x="876" y="118" width="128" height="82" rx="6"/>
+          <text class="t" x="940" y="144" text-anchor="middle">authors.sqlite</text>
+          <text class="s" x="940" y="164" text-anchor="middle">papers, authors</text>
+          <text class="s" x="940" y="182" text-anchor="middle">+ title index</text>
+
+          <rect class="box sem" x="876" y="226" width="128" height="82" rx="6"/>
+          <text class="t" x="940" y="252" text-anchor="middle">title_vectors</text>
+          <text class="s" x="940" y="272" text-anchor="middle">FAISS · 384-d</text>
+          <text class="s" x="940" y="290" text-anchor="middle">papers 2024+</text>
+
+          <!-- arrows -->
+          <path class="ln" d="M156 196 H222" marker-end="url(#a1)"/>
+          <text class="lbl" x="189" y="188" text-anchor="middle">question</text>
+          <path class="ln" d="M226 228 H160" marker-end="url(#a1)"/>
+          <text class="lbl" x="193" y="246" text-anchor="middle">events</text>
+
+          <path class="ln" d="M366 196 H432" marker-end="url(#a1)"/>
+          <text class="lbl" x="399" y="188" text-anchor="middle">starts</text>
+          <path class="ln" d="M436 228 H370" marker-end="url(#a1)"/>
+          <text class="lbl" x="403" y="246" text-anchor="middle">queue</text>
+
+          <path class="ln" d="M501 150 V84" marker-end="url(#a1)"/>
+          <text class="lbl" x="494" y="121" text-anchor="end">messages + results</text>
+          <path class="ln" d="M541 80 V146" marker-end="url(#a1)"/>
+          <text class="lbl" x="548" y="121">tool calls · text</text>
+
+          <path class="ln" d="M606 196 H672" marker-end="url(#a1)"/>
+          <text class="lbl" x="639" y="188" text-anchor="middle">call</text>
+          <path class="ln" d="M676 228 H610" marker-end="url(#a1)"/>
+          <text class="lbl" x="643" y="246" text-anchor="middle">results</text>
+
+          <path class="ln" d="M816 186 L872 162" marker-end="url(#a1)"/>
+          <text class="lbl" x="846" y="163" text-anchor="middle">SQL</text>
+          <path class="ln" d="M816 238 L872 262" marker-end="url(#a1)"/>
+          <text class="lbl" x="846" y="268" text-anchor="middle">k-NN</text>
+        </svg>
+      </div>
+      <figcaption>The page sends one <b>POST</b> and reads the answer as a stream of server-sent events: <code>status</code> (a tool is running), <code>token</code> (answer text), <code>retract</code> (drop a draft), and finally <code>done</code> with the cited sources and the diagnostics. The agent runs in its own thread because SQLite connections can't cross threads; pressing Stop or closing the tab cancels it, including a running query.</figcaption>
+    </figure>
+    <ul class="legend" aria-label="Diagram legend">
+      <li><span class="k"></span>where the decisions are made</li>
+      <li><span class="v"></span>meaning-based (semantic) search</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="s-search">
+    <div class="sec-head">
+      <p class="eyebrow">2 · Finding papers</p>
+      <h2 id="s-search">Hybrid search: keywords and meaning together</h2>
+      <p>DBLP holds titles, years, venues and authors only, so a paper is found by its title. Keyword search finds the exact words; semantic search finds titles that mean the same thing in other words.</p>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="d" viewBox="0 0 1020 320" role="img" aria-label="A search query runs three ways: embedded by MiniLM and matched by FAISS against the 2024+ vectors, and twice by keyword over all years, once requiring every word and once some words. Every-word matches and meaning matches are fused by reciprocal rank fusion; some-word matches only fill the remaining places in the top 12.">
+          <defs>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <rect class="box" x="16" y="133" width="150" height="64" rx="6"/>
+          <text class="t" x="91" y="160" text-anchor="middle">search_papers</text>
+          <text class="s" x="91" y="180" text-anchor="middle">query + filters</text>
+
+          <path class="ln" d="M166 165 H222" marker-end="url(#a2)"/>
+          <path class="ln" d="M190 165 V62 H222" marker-end="url(#a2)"/>
+          <path class="ln" d="M190 165 V268 H222" marker-end="url(#a2)"/>
+
+          <rect class="box sem" x="226" y="30" width="190" height="64" rx="6"/>
+          <text class="t" x="321" y="56" text-anchor="middle">Embed the query</text>
+          <text class="s" x="321" y="76" text-anchor="middle">MiniLM · 384 numbers</text>
+          <text class="lbl" x="232" y="117">skipped when every asked year is before 2024</text>
+
+          <rect class="box" x="226" y="133" width="190" height="64" rx="6"/>
+          <text class="t" x="321" y="159" text-anchor="middle">Keyword: every word</text>
+          <text class="s" x="321" y="179" text-anchor="middle">FTS5 · BM25 ranking</text>
+
+          <rect class="box" x="226" y="236" width="190" height="64" rx="6"/>
+          <text class="t" x="321" y="262" text-anchor="middle">Keyword: some words</text>
+          <text class="s" x="321" y="282" text-anchor="middle">FTS5 · BM25 ranking</text>
+
+          <path class="ln" d="M416 62 H462" marker-end="url(#a2)"/>
+          <path class="ln" d="M416 165 H462" marker-end="url(#a2)"/>
+          <path class="ln" d="M416 268 H462" marker-end="url(#a2)"/>
+
+          <rect class="box sem" x="466" y="30" width="190" height="64" rx="6"/>
+          <text class="t" x="561" y="56" text-anchor="middle">Nearest 200 titles</text>
+          <text class="s" x="561" y="76" text-anchor="middle">FAISS · 32 of 4,965 clusters</text>
+
+          <rect class="box" x="466" y="133" width="190" height="64" rx="6"/>
+          <text class="t" x="561" y="159" text-anchor="middle">Up to 200 titles</text>
+          <text class="s" x="561" y="179" text-anchor="middle">contain every word</text>
+
+          <rect class="box" x="466" y="236" width="190" height="64" rx="6"/>
+          <text class="t" x="561" y="262" text-anchor="middle">Up to 200 titles</text>
+          <text class="s" x="561" y="282" text-anchor="middle">contain some words</text>
+
+          <path class="ln" d="M656 62 H681 V100 H702" marker-end="url(#a2)"/>
+          <path class="ln" d="M656 165 H681 V132 H702" marker-end="url(#a2)"/>
+
+          <rect class="box key" x="706" y="80" width="140" height="72" rx="6"/>
+          <text class="t" x="776" y="110" text-anchor="middle">Fuse rankings</text>
+          <text class="s" x="776" y="130" text-anchor="middle">RRF · k = 60</text>
+
+          <path class="ln" d="M846 116 H861 V150 H872" marker-end="url(#a2)"/>
+          <path class="ln" d="M656 268 H861 V182 H872" marker-end="url(#a2)"/>
+          <text class="lbl" x="760" y="260" text-anchor="middle">only fills the rest</text>
+
+          <rect class="box" x="876" y="126" width="128" height="80" rx="6"/>
+          <text class="t" x="940" y="152" text-anchor="middle">Top 12 papers</text>
+          <text class="s" x="940" y="172" text-anchor="middle">refs P1, P2, …</text>
+          <text class="s" x="940" y="190" text-anchor="middle">to the model</text>
+        </svg>
+      </div>
+      <figcaption><b>Why only every-word matches join the fusion:</b> fusing titles that share one loose word ("model", "data") with the meaning matches pushed good results out, scoring below semantic search alone (0.62 against 0.68). Titles with some words still fill the list after the fused ones, which is how papers older than 2024, which have no vector, are found. Year, venue and author filters apply to every branch.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="s-loop">
+    <div class="sec-head">
+      <p class="eyebrow">3 · The agent loop</p>
+      <h2 id="s-loop">Each round, and what the code checks</h2>
+      <p>The model decides which tools to call; the loop runs them and decides what the model is allowed to send back.</p>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="d" viewBox="0 0 1020 262" role="img" aria-label="Each model round either requests tools, which run and start the next round, up to five rounds, or gives an answer. An answer given without using any tool is retracted and the model is told once to use the data, unless it is the decline message. Then citations are checked and the done event is sent with diagnostics.">
+          <defs>
+            <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <rect class="box" x="16" y="30" width="160" height="70" rx="6"/>
+          <text class="t" x="96" y="58" text-anchor="middle">Model round</text>
+          <text class="s" x="96" y="78" text-anchor="middle">streams text or calls</text>
+
+          <rect class="box" x="226" y="30" width="170" height="70" rx="6"/>
+          <text class="t" x="311" y="58" text-anchor="middle">Tool calls?</text>
+          <text class="s" x="311" y="78" text-anchor="middle">native, or JSON as text</text>
+
+          <rect class="box" x="446" y="30" width="190" height="70" rx="6"/>
+          <text class="t" x="541" y="58" text-anchor="middle">No tool used yet?</text>
+          <text class="s" x="541" y="78" text-anchor="middle">and not the decline</text>
+
+          <rect class="box" x="686" y="30" width="150" height="70" rx="6"/>
+          <text class="t" x="761" y="58" text-anchor="middle">Check citations</text>
+          <text class="s" x="761" y="78" text-anchor="middle">drop made-up refs</text>
+
+          <rect class="box key" x="876" y="30" width="128" height="70" rx="6"/>
+          <text class="t" x="940" y="58" text-anchor="middle">done event</text>
+          <text class="s" x="940" y="78" text-anchor="middle">+ diagnostics</text>
+
+          <path class="ln" d="M176 65 H222" marker-end="url(#a3)"/>
+          <path class="ln" d="M396 65 H442" marker-end="url(#a3)"/>
+          <text class="lbl" x="419" y="57" text-anchor="middle">no</text>
+          <path class="ln" d="M636 65 H682" marker-end="url(#a3)"/>
+          <text class="lbl" x="659" y="57" text-anchor="middle">no</text>
+          <path class="ln" d="M836 65 H872" marker-end="url(#a3)"/>
+
+          <rect class="box" x="226" y="168" width="170" height="64" rx="6"/>
+          <text class="t" x="311" y="194" text-anchor="middle">Run the tools</text>
+          <text class="s" x="311" y="214" text-anchor="middle">30 s limit · status event</text>
+
+          <rect class="box key" x="446" y="168" width="190" height="64" rx="6"/>
+          <text class="t" x="541" y="194" text-anchor="middle">Retract the draft</text>
+          <text class="s" x="541" y="214" text-anchor="middle">tell it once to use tools</text>
+
+          <path class="ln" d="M311 100 V164" marker-end="url(#a3)"/>
+          <text class="lbl" x="318" y="137">yes</text>
+          <path class="ln" d="M226 200 H96 V104" marker-end="url(#a3)"/>
+          <text class="lbl" x="160" y="192" text-anchor="middle">next round (max 5)</text>
+
+          <path class="ln" d="M541 100 V164" marker-end="url(#a3)"/>
+          <text class="lbl" x="548" y="137">yes</text>
+          <path class="ln" d="M541 232 V250 H56 V104" marker-end="url(#a3)"/>
+          <text class="lbl" x="530" y="244" text-anchor="end">answer again from the data</text>
+        </svg>
+      </div>
+      <figcaption>Text the model streams before deciding to call a tool ("Let me search…", or a draft from memory) is withdrawn with a <code>retract</code> event, so it disappears from the page. After five tool rounds the model must answer with what it has.</figcaption>
+    </figure>
+    <dl class="guards">
+      <div><dt>Answers only from the data</dt><dd>An answer that used no tool is accepted only if it is the decline message. Mistral once answered with invented counts and no tool call; this check catches that.</dd></div>
+      <div><dt>Declines what isn't about DBLP</dt><dd>Concept explanations, general knowledge, code requests and "ignore your instructions" get a fixed reply that suggests a question the data can answer.</dd></div>
+      <div><dt>Made-up citations removed</dt><dd>Every paper a tool returns gets a ref (P1, P2, …). Refs the model invents are dropped from the answer and from the sources list.</dd></div>
+      <div><dt>Tool calls written as text</dt><dd>Small local models write <code>{"name": "topic_stats", …}</code> as plain text. A reply that is only such calls is run as real tool calls.</dd></div>
+      <div><dt>Citation formats</dt><dd>GPT-OSS writes 【P1】 and sometimes puts an invisible zero-width space inside the brackets; both are recognised.</dd></div>
+      <div><dt>Limits</dt><dd>Each tool call stops after 30 seconds; rate-limited providers are retried up to three times; Stop and closing the tab cancel the work.</dd></div>
+    </dl>
+  </section>
+
+  <section aria-labelledby="s-build">
+    <div class="sec-head">
+      <p class="eyebrow">4 · Built ahead of time</p>
+      <h2 id="s-build">The indexes behind the tools</h2>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="d" viewBox="0 0 1020 230" role="img" aria-label="dblp_full.csv is turned into authors.sqlite by build_author_index; build_title_index adds a keyword index of titles to it; build_title_vectors embeds the titles into title_vectors; eval.py measures accuracy and writes eval_results.json, which every answer quotes.">
+          <defs>
+            <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <rect class="box" x="16" y="30" width="140" height="60" rx="6"/>
+          <text class="t" x="86" y="56" text-anchor="middle">dblp_full.csv</text>
+          <text class="s" x="86" y="76" text-anchor="middle">8.4M records</text>
+
+          <rect class="box" x="196" y="30" width="170" height="60" rx="6"/>
+          <text class="t" x="281" y="56" text-anchor="middle">build_author_index</text>
+          <text class="s" x="281" y="76" text-anchor="middle">about 6 min</text>
+
+          <rect class="box key" x="406" y="30" width="150" height="60" rx="6"/>
+          <text class="t" x="481" y="56" text-anchor="middle">authors.sqlite</text>
+          <text class="s" x="481" y="76" text-anchor="middle">2.8 GB</text>
+
+          <rect class="box" x="596" y="30" width="180" height="60" rx="6"/>
+          <text class="t" x="686" y="56" text-anchor="middle">build_title_vectors</text>
+          <text class="s" x="686" y="76" text-anchor="middle">CPU · 285 titles/s</text>
+
+          <rect class="box sem" x="816" y="30" width="188" height="60" rx="6"/>
+          <text class="t" x="910" y="56" text-anchor="middle">title_vectors/</text>
+          <text class="s" x="910" y="76" text-anchor="middle">1.54M papers · 0.09 GB</text>
+
+          <rect class="box" x="196" y="140" width="170" height="60" rx="6"/>
+          <text class="t" x="281" y="166" text-anchor="middle">build_title_index</text>
+          <text class="s" x="281" y="186" text-anchor="middle">about 1 min</text>
+
+          <rect class="box" x="596" y="140" width="180" height="60" rx="6"/>
+          <text class="t" x="686" y="166" text-anchor="middle">rag/eval.py</text>
+          <text class="s" x="686" y="186" text-anchor="middle">10 queries · 6 checks</text>
+
+          <rect class="box" x="816" y="140" width="188" height="60" rx="6"/>
+          <text class="t" x="910" y="166" text-anchor="middle">eval_results.json</text>
+          <text class="s" x="910" y="186" text-anchor="middle">quoted under answers</text>
+
+          <path class="ln" d="M156 60 H192" marker-end="url(#a4)"/>
+          <path class="ln" d="M366 60 H402" marker-end="url(#a4)"/>
+          <path class="ln" d="M556 60 H592" marker-end="url(#a4)"/>
+          <path class="ln" d="M776 60 H812" marker-end="url(#a4)"/>
+          <path class="ln" d="M366 170 H460 V94" marker-end="url(#a4)"/>
+          <text class="lbl" x="413" y="162" text-anchor="middle">adds title index</text>
+          <path class="ln" d="M510 90 V170 H592" marker-end="url(#a4)"/>
+          <text class="lbl" x="551" y="162" text-anchor="middle">reads</text>
+          <path class="ln" d="M776 170 H812" marker-end="url(#a4)"/>
+        </svg>
+      </div>
+      <figcaption>The meaning vectors cover only papers from 2024 on, because embedding all 8.4 million titles on this laptop's CPU would take about 8 hours. The same script uses a CUDA GPU automatically and resumes where it stopped, so the full set can be built on a GPU machine with <code>build_title_vectors.py --restart</code>.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="s-measured">
+    <div class="sec-head">
+      <p class="eyebrow">5 · Measured</p>
+      <h2 id="s-measured">Accuracy and speed</h2>
+      <p>Accuracy has three layers: the data queries are exact, search finds relevant papers most of the time, and the model can misread results. Every answer's Details panel shows these figures next to its own timings.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Layer</th><th>Figure</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr><td>Data</td><td class="num">exact</td><td class="note">Counts and profiles are database queries. They match title keywords only: synonyms are counted separately and arXiv preprints of published papers are included.</td></tr>
+          <tr><td>Keyword search</td><td class="num">0.62</td><td class="note">Share of the top 20 results that are on topic, over 10 test queries (2024 on).</td></tr>
+          <tr><td>Semantic search</td><td class="num">0.68</td><td class="note">Same test. Strongest on reworded questions: 0.15 to 0.50 and 0.00 to 0.60 on the two hardest.</td></tr>
+          <tr><td>Hybrid search</td><td class="num">0.68</td><td class="note">Same test; matches the better single method.</td></tr>
+          <tr><td>Groq · gpt-oss-120b</td><td class="num">6 / 6</td><td class="note">Counting and lookup questions checked against the database. Answers in 2 to 8 s for counts, 8 to 17 s for topic questions.</td></tr>
+          <tr><td>Mistral · ministral-14b</td><td class="num">6 / 6</td><td class="note">Same checks, 3 to 13 s. Needs the no-tools check: it sometimes drafts from memory first.</td></tr>
+          <tr><td>Ollama · qwen2.5-coder 7B</td><td class="num">not tested</td><td class="note">Runs offline on the CPU, 35 to 165 s per answer.</td></tr>
+          <tr><td>First search after a restart</td><td class="num">+10–20 s</td><td class="note">Loading the embedding model; later questions skip it.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="s-files">
+    <div class="sec-head">
+      <p class="eyebrow">6 · Where it lives</p>
+      <h2 id="s-files">Files</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>backend/api.py</code></td><td class="note"><code>POST /api/ask</code> (event stream) and <code>GET /api/ask/status</code>; typed event models.</td></tr>
+          <tr><td><code>backend/rag/agent.py</code></td><td class="note">The loop: model rounds, guards, citation checks, diagnostics.</td></tr>
+          <tr><td><code>backend/rag/tools.py</code></td><td class="note">The four tools, the P1, P2 refs, the per-call trace.</td></tr>
+          <tr><td><code>backend/rag/title_search.py</code></td><td class="note">Keyword, semantic and hybrid search; topic counts.</td></tr>
+          <tr><td><code>backend/rag/llm.py</code></td><td class="note">Providers (Groq, Mistral, Gemini, OpenRouter, Ollama, custom) through one OpenAI-compatible client; keys in <code>backend/.env</code>.</td></tr>
+          <tr><td><code>backend/author_index.py</code></td><td class="note">Researcher search and profiles, shared with the rest of the dashboard.</td></tr>
+          <tr><td><code>backend/rag/build_title_index.py</code>, <code>build_title_vectors.py</code></td><td class="note">Build the keyword index and the meaning vectors.</td></tr>
+          <tr><td><code>backend/rag/eval.py</code>, <code>ask_cli.py</code></td><td class="note">Measure accuracy; ask from the terminal.</td></tr>
+          <tr><td><code>frontend/src/pages/AskPage.tsx</code></td><td class="note">The Ask page; stream reader in <code>src/api/ask.ts</code>, Details panel in <code>src/components/AnswerDetails.tsx</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Snapshot of the DBLP coursework project, 10 October 2026. Figures come from the project's own index and from <code>rag/eval.py</code>.</footer>
+</div>
